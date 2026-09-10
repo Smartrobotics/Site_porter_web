@@ -34,6 +34,7 @@ export interface RequestRaw {
   delivered_at: string | null
   confirmed_at: string | null
   robot_phase: string | null
+  robot_scenario: string | null
   step_index: number | null
   step_total: number | null
 }
@@ -45,13 +46,27 @@ function toMs(s: string | null): number | undefined {
   return Number.isNaN(ms) ? undefined : ms
 }
 
-/** 走行中の断片 → 画面のフェーズ。engine.py の STEPS と対応させる */
-const STEP_PHASE: Record<number, RobotTransportPhase> = {
-  1: 'dispatching', // init
-  2: 'loading', // pick_up
-  3: 'transporting', // move_to_target
-  4: 'transporting', // elv
-  5: 'arrived', // put_down
+/**
+ * 断片の種別 → 画面のフェーズ。
+ *
+ * 番号では決められない。走行の断片数は依頼ごとに変わり、move_to_target は
+ * エレベーターの前後で2回出る。種別で見れば計画が変わっても壊れない。
+ * 種別は断片名の末尾にある: run_<id>_<NN>_<kind>
+ */
+const KIND_PHASE: Record<string, RobotTransportPhase> = {
+  init: 'dispatching',
+  pick_up: 'loading',
+  move_to_target: 'transporting',
+  elv: 'transporting',
+  put_down: 'arrived',
+  return_home: 'returning',
+}
+
+/** run_11_05_move_to_target → move_to_target */
+function fragmentKind(name: string | null): string {
+  if (!name) return ''
+  const m = /^run_\d+_\d+_(.+)$/.exec(name)
+  return m ? m[1] : ''
 }
 
 const PHASE_MESSAGE: Record<RobotTransportPhase, string> = {
@@ -74,7 +89,7 @@ function phaseOf(r: RequestRaw): RobotTransportPhase {
     case 'running':
       // 回収はひとまとめに「空荷台回収中」。段階を分けても人には意味がない
       if (r.kind === 'collect') return 'returning'
-      return STEP_PHASE[r.step_index ?? 1] ?? 'transporting'
+      return KIND_PHASE[fragmentKind(r.robot_scenario)] ?? 'transporting'
     case 'delivered':
     case 'confirmed':
     case 'done':

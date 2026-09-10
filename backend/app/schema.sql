@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS robot (
     name          TEXT NOT NULL UNIQUE,          -- '宅配ロボット'。2台目からは 1号機 / 2号機 など
     phase         TEXT NOT NULL DEFAULT 'idle'
                   CHECK (phase IN ('idle','delivery','return','homing','error')),
+    -- ロボットが HOME にいるか。1 = いる。
+    -- init 断片は set_robot_position で「お前は HOME にいる」と宣言するだけで、
+    -- HOME へ走るわけではない。実際には別の場所にいるのに init を流すと、
+    -- 誤った自己位置で走り出す。だから走行を始める前にここを必ず見る。
+    -- プロセスのメモリではなく行に置くのは、サーバーが落ちても失われないため。
+    at_home       INTEGER NOT NULL DEFAULT 1 CHECK (at_home IN (0, 1)),
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
     step_total    INTEGER,

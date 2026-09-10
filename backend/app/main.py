@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .ca import router as ca_router
 from .db import DB_PATH, get_db, init_db
-from .engine import ROBOT_MODE, run_engine
+from .engine import ROBOT_MODE, request_cancel, run_engine
 from .logging_config import setup_logging
 from .schemas import (
     AddressOut,
@@ -81,7 +81,8 @@ REQUEST_COLUMNS = """
        r.from_address_id, r.to_address_id,
        r.started_at, r.delivered_at, r.confirmed_at,
        fa.label AS from_area, ta.label AS to_area, rk.marker_id AS rack_marker_id,
-       rb.phase AS robot_phase, rb.step_index, rb.step_total
+       rb.phase AS robot_phase, rb.scenario_name AS robot_scenario,
+       rb.step_index, rb.step_total
 """
 
 # 走行中の依頼にだけロボットの現在位置をぶら下げる。
@@ -232,6 +233,23 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
             ),
         )
 
+    # 生成器は「HOME の階で荷台を拾う」形しか作れない(init は HOME の階からのみ)。
+    # press_scenario_4/5 もその形だった: 2F で拾って 1F へ、戻りは回収。
+    # 受け付けてから走行開始時に失敗させるより、ここで断ったほうが親切
+    home_floor = _home_floor()
+    if home_floor is not None and rack["rack_area_id"] is not None:
+        floor = db.execute(
+            "SELECT floor FROM area WHERE id = ?", (rack["rack_area_id"],)
+        ).fetchone()
+        if floor is not None and floor["floor"] != home_floor:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"荷台{rack['marker_id']}は{floor['floor']}Fにあります。"
+                    f"搬送依頼はロボットの待機階({home_floor}F)にある荷台のみ対応しています。"
+                ),
+            )
+
     # 送り状番号は二重送信の検査キー。同じ番号が既にあれば受け付けない
     if payload.tracking_no:
         dup = db.execute(
@@ -360,17 +378,22 @@ def cancel_request(
             (request_id,),
         )
 
-    # 走行中だったならロボットを解放し、荷台を出発した番地に戻す。
-    # 実際には荷台はロボットの下のどこかにあるが、番地なしのまま残すと
-    # その荷台は二度と選べなくなる(POST が「使用中」で断る)。
+    # 走行中だった場合。
+    # 荷台は出発した番地に戻す。実際にはロボットの下のどこかにあるが、
+    # 番地なしのまま残すとその荷台は二度と選べなくなる(POST が「使用中」で断る)。
     # 出発地に戻す方が現実に近く、違っていれば荷台配置初期設定で人が直せる。
+    #
+    # ロボットは即座に解放しない。中断はエレベーター動作中に効かないことがあり
+    # (§3.3)、まだ動いている相手に次の断片を投げてしまう。
+    # 実機のときはエンジンが終了状態を待ってから解放する。
     if row["status"] == "running":
-        db.execute(
-            """UPDATE robot SET phase = 'idle', scenario_name = NULL,
-                                step_index = NULL, step_total = NULL
-               WHERE id = 1"""
-        )
         _park_rack(db, row["rack_id"], row["from_address_id"])
+        if not request_cancel(request_id):
+            db.execute(
+                """UPDATE robot SET phase = 'idle', scenario_name = NULL,
+                                    step_index = NULL, step_total = NULL
+                   WHERE id = 1"""
+            )
     db.commit()
     log.info("依頼を取消しました id=%s mode=%s", request_id, payload.mode)
 
@@ -531,3 +554,16 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=404, detail="ロボットが登録されていません")
     return {**dict(row), "mode": ROBOT_MODE}
+
+
+def _home_floor() -> int | None:
+    """ロボットの待機階。floors.json の home を持つ階"""
+    try:
+        from .scenario import load_floors
+
+        for key, fl in load_floors()["floors"].items():
+            if "home" in fl:
+                return int(key)
+    except Exception:  # noqa: BLE001
+        log.exception("floors.json から待機階を読めませんでした")
+    return None
