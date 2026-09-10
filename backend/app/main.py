@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from .ca import router as ca_router
 from .db import DB_PATH, get_db, init_db
 from .logging_config import setup_logging
-from .schemas import RequestOut
+from .schemas import AddressOut, AreaOut, RackOut, RequestOut
 
 setup_logging()
 log = logging.getLogger(__name__)
@@ -72,8 +72,59 @@ ORDER BY r.created_at DESC, r.id DESC
 """
 
 
-@app.get("/api/requests", response_model=list[RequestOut])
+@app.get("/api/request", response_model=list[RequestOut])
 def list_requests(db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute(REQUEST_LIST_SQL).fetchall()
     log.debug("依頼一覧を返しました count=%s", len(rows))
     return [dict(row) for row in rows]
+
+
+# ---------------------------------------------------------------- マスタ
+# 画面の選択肢になるデータ。起動時に一度だけ読めばよい。
+
+AREA_LIST_SQL = """
+SELECT id, floor, map_no, label
+FROM area
+WHERE is_deleted = 0
+ORDER BY id
+"""
+
+
+@app.get("/api/area", response_model=list[AreaOut])
+def list_areas(db: sqlite3.Connection = Depends(get_db)):
+    rows = db.execute(AREA_LIST_SQL).fetchall()
+    return [dict(row) for row in rows]
+
+
+ADDRESS_LIST_SQL = """
+SELECT sa.id, sa.area_id, sa.address_no, sa.path_no, a.label AS area_label
+FROM street_address sa
+JOIN area a ON a.id = sa.area_id
+WHERE sa.is_deleted = 0 AND a.is_deleted = 0
+ORDER BY sa.area_id, sa.address_no
+"""
+
+
+@app.get("/api/address", response_model=list[AddressOut])
+def list_addresses(db: sqlite3.Connection = Depends(get_db)):
+    rows = db.execute(ADDRESS_LIST_SQL).fetchall()
+    return [
+        {**dict(row), "label": f"{row['area_label']} 番地{row['address_no']}"}
+        for row in rows
+    ]
+
+
+RACK_LIST_SQL = """
+SELECT rk.id, rk.marker_id, rk.street_address_id, rk.is_empty,
+       sa.area_id, sa.address_no
+FROM rack rk
+LEFT JOIN street_address sa ON sa.id = rk.street_address_id
+WHERE rk.is_deleted = 0
+ORDER BY rk.marker_id
+"""
+
+
+@app.get("/api/rack", response_model=list[RackOut])
+def list_racks(db: sqlite3.Connection = Depends(get_db)):
+    rows = db.execute(RACK_LIST_SQL).fetchall()
+    return [{**dict(row), "label": f"荷台{row['marker_id']}"} for row in rows]
