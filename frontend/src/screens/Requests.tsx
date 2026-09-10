@@ -5,8 +5,7 @@ import { useScreenData } from '../lib/useScreenData'
 import { PhaseBadge } from '../components/ui'
 import { IconList } from '../components/icons'
 import { PollingStamp } from '../components/PollingStamp'
-import { floorLabel, spotLabel } from '../building/types'
-import { getBuilding } from '../building/sampleBuildings'
+import { addressLabel, areaLabel, findRack, type Master } from '../domain/master'
 import { isActivePhase } from '../domain/phase'
 import type { TransportTask } from '../domain/types'
 
@@ -30,13 +29,13 @@ function kindLabel(t: TransportTask): string {
 }
 
 /** 依頼内容 */
-function contentLabel(t: TransportTask, markerId?: string): string {
+function contentLabel(t: TransportTask, markerId?: number): string {
   if (t.kind === 'collect') return `空荷台(マーカーID: ${markerId ?? '-'}) を回収`
   return `荷物：${t.itemName || '宅配荷物'}`
 }
 
-function place(building: ReturnType<typeof getBuilding>, floorId: string, spotId?: string): string {
-  return spotId ? spotLabel(building, spotId) : floorLabel(building, floorId)
+function place(master: Master, areaId: number, addressId?: number): string {
+  return addressId ? addressLabel(master, addressId) : areaLabel(master, areaId)
 }
 
 /**
@@ -48,7 +47,7 @@ function place(building: ReturnType<typeof getBuilding>, floorId: string, spotId
 export function Requests() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, carts } = useStore()
+  const { tasks, master } = useStore()
   const [params] = useSearchParams()
   const [recipient, setRecipient] = useState(params.get('user') ?? '')
 
@@ -101,7 +100,6 @@ export function Requests() {
       ) : (
         <div className="stack-sm">
           {rows.map((t) => {
-            const building = getBuilding(t.buildingId)
             return (
               <div key={t.id} className="card card-pad">
                 <div className="muted" style={{ fontSize: 12 }}>
@@ -122,15 +120,15 @@ export function Requests() {
                   )}
                 </div>
 
-                <div style={{ fontSize: 14, marginTop: 6 }}>{contentLabel(t, t.markerId || carts.find((c) => c.id === t.cartId)?.markerId)}</div>
+                <div style={{ fontSize: 14, marginTop: 6 }}>{contentLabel(t, t.markerId ?? findRack(master, t.rackId)?.markerId)}</div>
                 {t.trackingNo && (
                   <div className="muted mono" style={{ fontSize: 12, marginTop: 2 }}>
                     送り状番号: {t.trackingNo}
                   </div>
                 )}
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                  {place(building, t.fromFloorId, t.fromSpotId)} →{' '}
-                  {place(building, t.toFloorId, t.toSpotId)}
+                  {place(master, t.fromAreaId, t.fromAddressId)} →{' '}
+                  {place(master, t.toAreaId, t.toAddressId)}
                 </div>
                 {t.recipient && (
                   <div style={{ marginTop: 8, fontSize: 15, fontWeight: 800 }}>

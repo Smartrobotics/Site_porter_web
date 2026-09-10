@@ -1,30 +1,30 @@
 import { useStore } from '../domain/store'
-import { floorLabel, spotLabel } from '../building/types'
+import { addressLabel, areaLabel, findAddress, floorLabel } from '../domain/master'
 import { IconPin, IconAlert } from './icons'
 
 /**
  * 現在地バッジ。
- * 既定では場所QRエントリーで確定した現在地を表示する。
+ * 既定では場所QRエントリーで確定した現在地(エリア)を表示する。
  * 搬送依頼入力画面のように、画面内で搬送元を選び直せる場合は
- * その選択を spotId / floorId で渡す。選び直した瞬間に表示が変わる。
+ * その選択を areaId / addressId で渡す。選び直した瞬間に表示が変わる。
  * どちらも分からないとき(E1-2 / E1-3)は隠さずに「場所不明」と出す。
  */
 export function LocationBadge({
   style,
-  spotId,
-  floorId,
+  areaId,
+  addressId,
 }: {
   style?: React.CSSProperties
-  spotId?: string
-  floorId?: string
+  areaId?: number
+  addressId?: number
 }) {
-  const { building, currentSpot } = useStore()
+  const { master, currentArea } = useStore()
 
   // 画面から渡された選択を優先する
-  const spot = spotId ? building.spots.find((s) => s.id === spotId) : currentSpot
-  const floor = spot ? spot.floorId : floorId
+  const address = findAddress(master, addressId)
+  const shownAreaId = address ? address.areaId : (areaId ?? currentArea?.id)
 
-  if (!spot && !floor) {
+  if (shownAreaId === undefined) {
     return (
       <div className="loc-badge loc-unknown" style={style}>
         <span className="loc-pin">
@@ -44,8 +44,9 @@ export function LocationBadge({
         <IconPin size={15} />
       </span>
       <span className="loc-text">
-        現在地: <strong>{spot ? spotLabel(building, spot.id) : floorLabel(building, floor!)}</strong>
-        {spot && <span className="loc-floor">({floorLabel(building, spot.floorId)})</span>}
+        現在地:{' '}
+        <strong>{address ? addressLabel(master, address.id) : areaLabel(master, shownAreaId)}</strong>
+        <span className="loc-floor">({floorLabel(master, shownAreaId)})</span>
       </span>
     </div>
   )

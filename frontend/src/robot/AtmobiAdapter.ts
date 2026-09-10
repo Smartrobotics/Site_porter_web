@@ -1,6 +1,6 @@
 import type { RobotAdapter, RobotStatusUpdate, RobotTransportPhase } from './types'
 import type { TransportRequest } from '../domain/types'
-import type { RouteMapping } from '../building/types'
+import type { RobotRoute } from './types'
 import { NaviStatus, naviStatusLabel, stateLabel } from './atmobiTypes'
 
 const DEFAULT_BASE_URL = 'http://localhost:5000'
@@ -54,7 +54,7 @@ export class AtmobiAdapter implements RobotAdapter {
     }
   }
 
-  async startTransport(_req: TransportRequest, route: RouteMapping): Promise<string> {
+  async startTransport(_req: TransportRequest, route: RobotRoute): Promise<string> {
     const { mapNo, pathNo } = route
     // 1) 環境地図の選択
     const r1 = await fetchWithTimeout(`${this.baseUrl}/navi/localize/map/${mapNo}`, { method: 'POST' })

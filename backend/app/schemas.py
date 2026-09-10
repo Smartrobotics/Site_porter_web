@@ -44,3 +44,9 @@ class RackOut(BaseModel):
     address_no: int | None
     label: str           # 表示用「荷台3」
 
+
+
+class UserOut(BaseModel):
+    """受取人。name は伝票QRの receiver と一致していること。"""
+    id: int
+    name: str

@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
-import { SAMPLE_PEOPLE } from '../domain/people'
 import type { Priority } from '../domain/types'
-import { findRoute, spotsOnFloor } from '../building/types'
+import { SITE_NAME, type Area } from '../domain/master'
 import { IconArrow, IconCamera } from '../components/icons'
 import { LocationBadge } from '../components/LocationBadge'
 
@@ -13,86 +12,69 @@ const PRIORITIES: { value: Priority; label: string; cls: string }[] = [
   { value: 'low', label: '低', cls: 'on-low' },
 ]
 
-interface FormState {
-  cartId: string
+/**
+ * 入力途中の内容。カメラ画面へ行って戻ってくる間もこれを持ち回る。
+ * 番地(address)は入っていない。番地を決めるのはサーバーの仕事で、
+ * 配送員が選ぶのはエリアまで。
+ */
+export interface FormState {
+  rackId: number
+  /** 入力欄の値なので文字列のまま持つ。数値に直すのは送信時 */
   markerId: string
   trackingNo: string
-  fromFloorId: string
-  toFloorId: string
-  fromSpotId?: string
-  toSpotId?: string
+  /** 0 = 未選択 */
+  fromAreaId: number
+  toAreaId: number
   itemName: string
   recipient: string
   priority: Priority
 }
 
 interface LocationState {
-  cartId?: string
+  rackId?: number
   /** 内容確認画面から「戻る」で返ってきたときの入力内容 */
   form?: FormState
-}
-
-/** 統合ロケーション値のエンコード/デコード: `floorId` または `floorId:spotId` */
-function encodeLoc(floorId: string, spotId?: string): string {
-  return spotId ? `${floorId}:${spotId}` : floorId
-}
-function decodeLoc(value: string): { floorId: string; spotId?: string } {
-  const [floorId, spotId] = value.split(':')
-  return { floorId, spotId: spotId || undefined }
 }
 
 export function Request() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { building, carts, currentSpot, setCurrentSpot } = useStore()
+  const { racks, users, currentArea, setCurrentArea, areas } = useStore()
 
   const state = (location.state as LocationState | null) ?? {}
-  const cart = carts.find((c) => c.id === (state.form?.cartId ?? state.cartId)) ?? carts[0]
-
-  const floors = building.floors
+  const rack = racks.find((r) => r.id === (state.form?.rackId ?? state.rackId)) ?? racks[0]
 
   // 「戻る」で返ってきたときは入力内容を復元する。
-  // 初回は搬送元を現在地(場所QR由来)で初期化する
+  // 初回は搬送元を現在地(壁QR由来)で初期化する
   const back = state.form
-  // 現在地が分からないときは既定の階を入れない。空のままにして「場所不明」を出す
-  const initialFrom = back
-    ? encodeLoc(back.fromFloorId, back.fromSpotId)
-    : currentSpot
-      ? encodeLoc(currentSpot.floorId, currentSpot.id)
-      : ''
+  // 現在地が分からないときは既定値を入れない。0 のままにして「場所不明」を出す
+  const initialFrom = back ? back.fromAreaId : (currentArea?.id ?? 0)
   const initialTo = back
-    ? encodeLoc(back.toFloorId, back.toSpotId)
-    : encodeLoc(floors[1]?.id ?? floors[0]?.id ?? '')
+    ? back.toAreaId
+    : (areas.find((a) => a.id !== initialFrom)?.id ?? 0)
 
-  const [fromLoc, setFromLoc] = useState(initialFrom)
-  const [toLoc, setToLoc] = useState(initialTo)
-  const [markerId, setMarkerId] = useState(back?.markerId ?? cart?.markerId ?? '')
+  const [fromAreaId, setFromAreaId] = useState(initialFrom)
+  const [toAreaId, setToAreaId] = useState(initialTo)
+  const [markerId, setMarkerId] = useState(back?.markerId ?? String(rack?.markerId ?? ''))
   const [trackingNo, setTrackingNo] = useState(back?.trackingNo ?? '')
   const [itemName, setItemName] = useState(back?.itemName ?? '')
   const [recipient, setRecipient] = useState(back?.recipient ?? '')
   const [priority, setPriority] = useState<Priority>(back?.priority ?? 'normal')
 
-  const from = decodeLoc(fromLoc)
-  const to = decodeLoc(toLoc)
+  const fromUnknown = fromAreaId === 0
+  const sameArea = !fromUnknown && fromAreaId === toAreaId
 
-  const fromUnknown = !fromLoc
-  const sameFloor = !fromUnknown && from.floorId === to.floorId
-  const route = findRoute(building, from.floorId, to.floorId)
-  const routeMissing = !fromUnknown && !sameFloor && !route
-
-  // 荷物名は任意(必須解除)。妥当な経路であれば送信可能
-  const canSubmit = !fromUnknown && !sameFloor && !routeMissing
+  // 荷物名は任意。搬送元と搬送先が別のエリアなら送信できる
+  const canSubmit = !fromUnknown && toAreaId !== 0 && !sameArea
 
 
   /** いま入力されている内容。カメラへ行くときも内容確認へ行くときも同じものを渡す */
-  const formState = () => ({
-    cartId: cart.id,
+  const formState = (): FormState => ({
+    rackId: rack?.id ?? 0,
     markerId: markerId.trim(),
     trackingNo: trackingNo.trim(),
-    fromFloorId: from.floorId,
-    toFloorId: to.floorId,
-    fromSpotId: from.spotId,
-    toSpotId: to.spotId,
+    fromAreaId,
+    toAreaId,
     itemName: itemName.trim(),
     recipient: recipient.trim(),
     priority,
@@ -108,10 +90,10 @@ export function Request() {
     <div className="fade-in">
       <div className="page-head">
         <h1>搬送依頼</h1>
-        <p>{building.name}</p>
+        <p>{SITE_NAME}</p>
       </div>
 
-      <LocationBadge style={{ marginBottom: 14 }} spotId={from.spotId} floorId={from.floorId || undefined} />
+      <LocationBadge style={{ marginBottom: 14 }} areaId={fromAreaId || undefined} />
 
       {/* 荷台のマーカー読み取り */}
       <button
@@ -151,21 +133,21 @@ export function Request() {
         <label>搬送元 → 搬送先</label>
         <div className="floor-row">
           <div>
-            <LocationSelect
-              value={fromLoc}
+            <AreaSelect
+              value={fromAreaId}
               onChange={(v) => {
-                setFromLoc(v)
+                setFromAreaId(v)
                 // 手で選び直したら、それが現在地。次に画面へ戻っても残る
-                setCurrentSpot(decodeLoc(v).spotId)
+                setCurrentArea(v || undefined)
               }}
-              building={building}
+              areas={areas}
             />
           </div>
           <div className="dir-arrow" aria-hidden="true">
             <IconArrow size={18} />
           </div>
           <div>
-            <LocationSelect value={toLoc} onChange={setToLoc} building={building} />
+            <AreaSelect value={toAreaId} onChange={setToAreaId} areas={areas} />
           </div>
         </div>
         {fromUnknown && (
@@ -173,14 +155,9 @@ export function Request() {
             現在地が分かりませんでした。搬送元を選んでください
           </div>
         )}
-        {sameFloor && (
+        {sameArea && (
           <div className="muted" style={{ fontSize: 12, color: 'var(--orange-dark)', marginTop: 6 }}>
-            搬送元と搬送先の階を別々に指定してください
-          </div>
-        )}
-        {routeMissing && (
-          <div className="muted" style={{ fontSize: 12, color: 'var(--orange-dark)', marginTop: 6 }}>
-            この階間の経路マッピングが未定義です
+            搬送元と搬送先を別々のエリアにしてください
           </div>
         )}
       </div>
@@ -202,12 +179,12 @@ export function Request() {
         <select className="select" value={recipient} onChange={(e) => setRecipient(e.target.value)}>
           <option value="">未選択</option>
           {/* 伝票QRの受取人が名簿にない場合も、伝票の記載をそのまま残す */}
-          {recipient && !SAMPLE_PEOPLE.some((p) => p.name === recipient) && (
+          {recipient && !users.some((u) => u.name === recipient) && (
             <option value={recipient}>{recipient}(名簿にありません)</option>
           )}
-          {SAMPLE_PEOPLE.map((p) => (
-            <option key={p.id} value={p.name}>
-              {p.name}({p.role})
+          {users.map((u) => (
+            <option key={u.id} value={u.name}>
+              {u.name}
             </option>
           ))}
         </select>
@@ -246,32 +223,27 @@ export function Request() {
   )
 }
 
-/** 場所主体の統合セレクタ: 階(optgroup)ごとに「階のみ」+その階の場所を列挙 */
-function LocationSelect({
+/** エリアの選択。配送員が選ぶのはここまでで、番地はサーバーが決める */
+function AreaSelect({
   value,
   onChange,
-  building,
+  areas,
 }: {
-  value: string
-  onChange: (v: string) => void
-  building: import('../building/types').BuildingProfile
+  value: number
+  onChange: (v: number) => void
+  areas: Area[]
 }) {
-  const groups = useMemo(
-    () => building.floors.map((f) => ({ floor: f, spots: spotsOnFloor(building, f.id) })),
-    [building],
-  )
   return (
-    <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
-      {value === '' && <option value="">場所不明 — 選んでください</option>}
-      {groups.map(({ floor, spots }) => (
-        <optgroup key={floor.id} label={floor.label}>
-          <option value={encodeLoc(floor.id)}>{floor.label}(階のみ)</option>
-          {spots.map((s) => (
-            <option key={s.id} value={encodeLoc(floor.id, s.id)}>
-              {s.label}
-            </option>
-          ))}
-        </optgroup>
+    <select
+      className="select"
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+    >
+      {value === 0 && <option value={0}>場所不明 — 選んでください</option>}
+      {areas.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.label}
+        </option>
       ))}
     </select>
   )

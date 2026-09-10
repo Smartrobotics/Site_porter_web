@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
 import { IconBell } from '../components/icons'
-import { floorLabel, spotLabel } from '../building/types'
-import { getBuilding } from '../building/sampleBuildings'
+import { addressLabel, areaLabel, findRack } from '../domain/master'
 
 /** 2026/09/01 12:34 */
 function stamp(ts: number): string {
@@ -22,7 +21,7 @@ function stamp(ts: number): string {
 export function Notifications() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, carts } = useStore()
+  const { tasks, master } = useStore()
   const [recipient, setRecipient] = useState('')
 
   const pending = useMemo(
@@ -82,10 +81,9 @@ export function Notifications() {
       ) : (
         <div className="stack-sm">
           {pending.map((t) => {
-            const building = getBuilding(t.buildingId)
-            const cart = carts.find((c) => c.id === t.cartId)
-            const from = t.fromSpotId ? spotLabel(building, t.fromSpotId) : floorLabel(building, t.fromFloorId)
-            const to = t.toSpotId ? spotLabel(building, t.toSpotId) : floorLabel(building, t.toFloorId)
+            const rack = findRack(master, t.rackId)
+            const from = t.fromAddressId ? addressLabel(master, t.fromAddressId) : areaLabel(master, t.fromAreaId)
+            const to = t.toAddressId ? addressLabel(master, t.toAddressId) : areaLabel(master, t.toAreaId)
             return (
               <div key={t.id} className="card card-pad">
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>
@@ -96,7 +94,7 @@ export function Notifications() {
                 <Row k="送り状番号" v={t.trackingNo || '未入力'} />
                 <Row k="エリア from" v={from} />
                 <Row k="エリア To" v={to} />
-                <Row k="荷台マーカーID" v={t.markerId || cart?.markerId || '-'} />
+                <Row k="荷台マーカーID" v={String(t.markerId ?? rack?.markerId ?? '-')} />
                 <Row k="荷物名" v={t.itemName} />
                 <Row k="受取人" v={t.recipient || '未選択'} />
 

@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
-import { getBuilding } from '../building/sampleBuildings'
-import { floorLabel, spotLabel } from '../building/types'
+import { addressLabel, areaLabel } from '../domain/master'
 import { PollingStamp } from '../components/PollingStamp'
 import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
@@ -16,10 +15,10 @@ export function TaskDetail() {
   useScreenData()
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tasks, cancelTask } = useStore()
+  const { tasks, cancelTask, master } = useStore()
   const [rawOpen, setRawOpen] = useState(false)
 
-  const task = tasks.find((t) => t.id === id)
+  const task = tasks.find((t) => t.id === Number(id))
 
   // 画面を開いた時点ですでに搬送完了だったか。
   // その場合は通知を出さず、ポーリングもしない(見るものがないため)。
@@ -36,10 +35,8 @@ export function TaskDetail() {
       </div>
     )
   }
-
-  const building = getBuilding(task.buildingId)
-  const fromLabel = floorLabel(building, task.fromFloorId)
-  const toLabel = floorLabel(building, task.toFloorId)
+  const fromLabel = areaLabel(master, task.fromAreaId)
+  const toLabel = areaLabel(master, task.toAreaId)
   const currentIdx = phaseIndex(task.phase)
   const isCompleted = task.phase === 'completed'
   const isError = task.phase === 'error'
@@ -182,7 +179,7 @@ export function TaskDetail() {
         <div className="kv">
           <span className="k">集積 / 受渡</span>
           <span className="v">
-            {spotLabel(building, task.fromSpotId)} / {spotLabel(building, task.toSpotId)}
+            {addressLabel(master, task.fromAddressId)} / {addressLabel(master, task.toAddressId)}
           </span>
         </div>
         <div className="kv">

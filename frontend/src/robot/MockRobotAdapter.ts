@@ -1,6 +1,6 @@
 import type { RobotAdapter, RobotStatusUpdate, RobotTransportPhase } from './types'
 import type { TransportRequest } from '../domain/types'
-import type { RouteMapping } from '../building/types'
+import type { RobotRoute } from './types'
 import { AtmobiState } from './atmobiTypes'
 
 interface Segment {
@@ -51,7 +51,7 @@ export class MockRobotAdapter implements RobotAdapter {
     return { ok: true, detail: 'デモモード稼働中(ローカルシミュレーション)' }
   }
 
-  async startTransport(req: TransportRequest, _route: RouteMapping): Promise<string> {
+  async startTransport(req: TransportRequest, _route: RobotRoute): Promise<string> {
     const id = `mock-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     this.kinds.set(id, req.kind === 'collect' ? 'collect' : 'delivery')
     return id

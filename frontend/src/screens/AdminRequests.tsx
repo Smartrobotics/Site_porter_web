@@ -4,8 +4,7 @@ import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
 import { PhaseBadge } from '../components/ui'
 import { IconList, IconAlert } from '../components/icons'
-import { floorLabel, spotLabel } from '../building/types'
-import { getBuilding } from '../building/sampleBuildings'
+import { addressLabel, areaLabel, findRack } from '../domain/master'
 import type { TransportTask } from '../domain/types'
 
 /** 2026/09/07 12:34:56 */
@@ -32,7 +31,7 @@ function liftCalled(t: TransportTask): boolean {
 export function AdminRequests() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, carts, cancelRequest } = useStore()
+  const { tasks, master, cancelRequest } = useStore()
   const [target, setTarget] = useState<TransportTask | null>(null)
 
   const rows = useMemo(() => [...tasks].sort((a, b) => b.createdAt - a.createdAt), [tasks])
@@ -69,9 +68,8 @@ export function AdminRequests() {
       ) : (
         <div className="stack-sm">
           {rows.map((t) => {
-            const building = getBuilding(t.buildingId)
-            const from = t.fromSpotId ? spotLabel(building, t.fromSpotId) : floorLabel(building, t.fromFloorId)
-            const to = t.toSpotId ? spotLabel(building, t.toSpotId) : floorLabel(building, t.toFloorId)
+            const from = t.fromAddressId ? addressLabel(master, t.fromAddressId) : areaLabel(master, t.fromAreaId)
+            const to = t.toAddressId ? addressLabel(master, t.toAddressId) : areaLabel(master, t.toAreaId)
             const assigned = t.phase !== 'queued' && t.phase !== 'cancelled' && !t.isDeleted
             const canCancel = !t.isDeleted && t.phase !== 'cancelled'
             return (
@@ -92,7 +90,7 @@ export function AdminRequests() {
                 </div>
                 <div style={{ fontSize: 14, marginTop: 6 }}>
                   {t.kind === 'collect'
-                    ? `空荷台(マーカーID: ${t.markerId || carts.find((c) => c.id === t.cartId)?.markerId || '-'}) を回収`
+                    ? `空荷台(マーカーID: ${t.markerId || findRack(master, t.rackId)?.markerId || '-'}) を回収`
                     : `荷物：${t.itemName || '宅配荷物'}`}
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>

@@ -2,25 +2,14 @@ import type { RobotTransportPhase } from '../robot/types'
 
 export type Priority = 'urgent' | 'normal' | 'low'
 
-/** 荷台 — マーカーIDはユーザーが自由に割当・変更できる(汎用マーカー要件) */
-export interface Cart {
-  id: string
-  label: string
-  markerId: string
-  /** いまどの場所に置かれているか。未設置なら undefined(DB の rack.street_address_id) */
-  spotId?: string
-}
-
-/** 受取人(サンプル人員リストから選択) */
-export interface Person {
-  id: string
-  name: string
-  role: string
-}
+/**
+ * 荷台(Rack)・受取人(User)・エリア・番地は domain/master.ts にある。
+ * どれもサーバーのマスタから来るので、ここでは持たない。
+ */
 
 export interface AppNotification {
   id: string
-  taskId: string
+  taskId: number
   title: string
   body: string
   createdAt: number
@@ -29,24 +18,33 @@ export interface AppNotification {
   kind: 'completed' | 'info' | 'error'
 }
 
-/** 搬送依頼の入力内容 */
+/**
+ * 搬送依頼の入力内容。DBの request テーブル1行に対応する。
+ *
+ * 場所は2段で持つ。配送員が選ぶのは**エリア**、番地を選ぶのは**サーバー**。
+ *   fromAreaId    … 壁QRで読んだエリア(必須)
+ *   fromAddressId … 荷台が今ある番地。荷台が搬送中なら未定
+ *   toAreaId      … 人が選んだエリア(必須)
+ *   toAddressId   … サーバーが決める。受付時点では未定のことがある(E7)
+ */
 export interface TransportRequest {
-  id: string
+  id: number
   /** delivery = 荷物搬送 / collect = 空荷台の回収(サーバーが作る) */
   kind?: 'delivery' | 'collect'
   /** user = 配送員 / system = サーバー */
   createdBy?: 'user' | 'system'
   /** この回収を生んだ搬送(表示用。DB では持たない) */
-  parentTaskId?: string
-  cartId: string
+  parentTaskId?: number
+  /** 運ぶ荷台。rack.id */
+  rackId: number
   /** 送り状番号(伝票QR)。二重送信の検査キーになる */
   trackingNo?: string
-  /** 荷台のマーカーID。依頼ごとの値で、荷台マスタは書き換えない */
-  markerId?: string
-  fromFloorId: string
-  toFloorId: string
-  fromSpotId?: string
-  toSpotId?: string
+  /** 依頼時に読んだ/入力したマーカーID。荷台マスタは書き換えない */
+  markerId?: number
+  fromAreaId: number
+  toAreaId: number
+  fromAddressId?: number
+  toAddressId?: number
   itemName: string
   recipient: string
   priority: Priority
@@ -54,7 +52,6 @@ export interface TransportRequest {
 
 /** 搬送タスク(依頼 + 進行状態) */
 export interface TransportTask extends TransportRequest {
-  buildingId: string
   createdAt: number
   phase: RobotTransportPhase
   progress: number
@@ -73,4 +70,12 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
   urgent: '高',
   normal: '中',
   low: '低',
+}
+
+/** 画面の優先度と DB の priority(1=高 2=中 3=低)の対応 */
+export const PRIORITY_TO_DB: Record<Priority, number> = { urgent: 1, normal: 2, low: 3 }
+export const PRIORITY_FROM_DB: Record<number, Priority> = {
+  1: 'urgent',
+  2: 'normal',
+  3: 'low',
 }

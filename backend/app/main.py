@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from .ca import router as ca_router
 from .db import DB_PATH, get_db, init_db
 from .logging_config import setup_logging
-from .schemas import AddressOut, AreaOut, RackOut, RequestOut
+from .schemas import AddressOut, AreaOut, RackOut, RequestOut, UserOut
 
 setup_logging()
 log = logging.getLogger(__name__)
@@ -128,3 +128,17 @@ ORDER BY rk.marker_id
 def list_racks(db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute(RACK_LIST_SQL).fetchall()
     return [{**dict(row), "label": f"荷台{row['marker_id']}"} for row in rows]
+
+
+USER_LIST_SQL = """
+SELECT id, name
+FROM user
+WHERE is_deleted = 0
+ORDER BY id
+"""
+
+
+@app.get("/api/user", response_model=list[UserOut])
+def list_user(db: sqlite3.Connection = Depends(get_db)):
+    rows = db.execute(USER_LIST_SQL).fetchall()
+    return [dict(row) for row in rows]

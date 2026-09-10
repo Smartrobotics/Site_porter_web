@@ -1,34 +1,13 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
-import type { Priority } from '../domain/types'
 import { PRIORITY_LABEL } from '../domain/types'
-import { floorLabel, spotLabel } from '../building/types'
+import { areaLabel, floorLabel } from '../domain/master'
+import type { FormState } from './Request'
 import { IconArrow } from '../components/icons'
 
 /** 依頼画面から渡ってくる入力内容 */
-export interface ConfirmState {
-  cartId: string
-  markerId: string
-  trackingNo: string
-  fromFloorId: string
-  toFloorId: string
-  fromSpotId?: string
-  toSpotId?: string
-  itemName: string
-  recipient: string
-  priority: Priority
-}
-
-/** 「搬送元 資材集積場(1F)」のような1行にする */
-function placeLabel(
-  building: import('../building/types').BuildingProfile,
-  floorId: string,
-  spotId?: string,
-): string {
-  const floor = floorLabel(building, floorId)
-  return spotId ? `${spotLabel(building, spotId)}(${floor})` : floor
-}
+export type ConfirmState = FormState
 
 /**
  * 搬送依頼内容確認画面。
@@ -37,7 +16,7 @@ function placeLabel(
 export function RequestConfirm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { building, startTransport } = useStore()
+  const { master, startTransport } = useStore()
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,14 +42,15 @@ export function RequestConfirm() {
     setError(null)
     try {
       const id = await startTransport({
-        id: `req-${Date.now().toString(36)}`,
-        cartId: req.cartId,
-        markerId: req.markerId,
-        trackingNo: req.trackingNo,
-        fromFloorId: req.fromFloorId,
-        toFloorId: req.toFloorId,
-        fromSpotId: req.fromSpotId,
-        toSpotId: req.toSpotId,
+        // IDはサーバーが振る。E3 まではストア側でローカル採番する
+        id: 0,
+        kind: 'delivery',
+        createdBy: 'user',
+        rackId: req.rackId,
+        markerId: req.markerId ? Number(req.markerId) : undefined,
+        trackingNo: req.trackingNo || undefined,
+        fromAreaId: req.fromAreaId,
+        toAreaId: req.toAreaId,
         itemName: req.itemName,
         recipient: req.recipient,
         priority: req.priority,
@@ -83,11 +63,14 @@ export function RequestConfirm() {
     }
   }
 
+  /** 「2Fエレベータ付近(2F)」 */
+  const place = (areaId: number) => `${areaLabel(master, areaId)}(${floorLabel(master, areaId)})`
+
   const rows: { k: string; v: string }[] = [
     { k: '荷台', v: `マーカーID: ${req.markerId}` },
     { k: '送り状番号', v: req.trackingNo || '未入力' },
-    { k: '搬送元', v: placeLabel(building, req.fromFloorId, req.fromSpotId) },
-    { k: '搬送先', v: placeLabel(building, req.toFloorId, req.toSpotId) },
+    { k: '搬送元', v: place(req.fromAreaId) },
+    { k: '搬送先', v: place(req.toAreaId) },
     { k: '荷物名', v: req.itemName || '宅配荷物' },
     { k: '受取人', v: req.recipient || '未選択' },
     { k: '優先度', v: PRIORITY_LABEL[req.priority] },
@@ -102,11 +85,11 @@ export function RequestConfirm() {
 
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="tc-route" style={{ marginBottom: 12 }}>
-          {placeLabel(building, req.fromFloorId, req.fromSpotId)}
+          {place(req.fromAreaId)}
           <span className="arrow">
             <IconArrow size={17} />
           </span>
-          {placeLabel(building, req.toFloorId, req.toSpotId)}
+          {place(req.toAreaId)}
         </div>
         {rows.map((r) => (
           <div key={r.k} className="row-between" style={{ padding: '7px 0' }}>

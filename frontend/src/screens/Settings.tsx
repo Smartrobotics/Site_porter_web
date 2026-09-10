@@ -2,27 +2,27 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useStore } from '../domain/store'
-import { SAMPLE_BUILDINGS } from '../building/sampleBuildings'
-import { floorLabel } from '../building/types'
-import type { BuildingProfile, SpotDef } from '../building/types'
-import type { Cart } from '../domain/types'
+import { floorLabel, SITE_NAME, type Area, type Master, type Rack } from '../domain/master'
 import type { RobotAdapterKind } from '../robot'
-import { IconCart, IconCheck, IconAlert, IconPlus, IconQr, IconClose, IconPin } from '../components/icons'
+import { IconCart, IconCheck, IconAlert, IconQr, IconClose, IconPin } from '../components/icons'
 
-/** 場所QRのエントリーURL(スマホ標準カメラで読む → ブラウザで現在地確定) */
-function entryUrl(buildingId: string, spotId: string): string {
+/**
+ * 壁QRのエントリーURL(スマホ標準カメラで読む → ブラウザで現在地確定)。
+ * QRに入るのは area.id の数字ひとつ。エリアに1枚だけ貼る。
+ */
+function entryUrl(areaId: number): string {
   const base = window.location.origin + window.location.pathname
-  return `${base}#/entry?b=${encodeURIComponent(buildingId)}&spot=${encodeURIComponent(spotId)}`
+  return `${base}#/entry?area=${areaId}`
 }
 
 export function Settings() {
   const navigate = useNavigate()
   const {
-    building,
-    setBuildingId,
-    carts,
-    updateCart,
-    addCart,
+    master,
+    areas,
+    addresses,
+    racks,
+    updateRack,
     robotConfig,
     setRobotConfig,
     checkRobotConnection,
@@ -59,75 +59,49 @@ export function Settings() {
         <p>建物・荷台・ロボット連携の構成</p>
       </div>
 
-      {/* ---------- 建物プロファイル ---------- */}
-      <div className="section-label">建物プロファイル</div>
+      {/* ---------- 現場の構成 ---------- */}
+      <div className="section-label">現場の構成</div>
       <div className="card card-pad">
-        <div className="field" style={{ marginBottom: 12 }}>
-          <label>現在の建物</label>
-          <select
-            className="select"
-            value={building.id}
-            onChange={(e) => setBuildingId(e.target.value)}
-          >
-            {SAMPLE_BUILDINGS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          サーバーのマスタ(area / street_address)をそのまま表示しています。
+          変更はデータベース側で行います。
+        </p>
 
         <div className="row-between" style={{ marginBottom: 6 }}>
-          <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>階</span>
-          <span className="muted" style={{ fontSize: 12 }}>{building.floors.length} 階</span>
+          <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>エリア</span>
+          <span className="muted" style={{ fontSize: 12 }}>{areas.length} 件</span>
         </div>
-        <div className="chip-grid" style={{ marginBottom: 12 }}>
-          {building.floors.map((f) => (
-            <span key={f.id} className="chip" style={{ height: 32, fontSize: 12.5 }}>
-              {f.label}
-            </span>
-          ))}
-        </div>
-
-        <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>場所</div>
         <div className="chip-grid" style={{ marginBottom: 14 }}>
-          {building.spots.map((s) => (
-            <span key={s.id} className="chip" style={{ height: 32, fontSize: 12 }}>
-              {s.label}
+          {areas.map((a) => (
+            <span key={a.id} className="chip" style={{ height: 32, fontSize: 12 }}>
+              {a.label}
             </span>
           ))}
         </div>
 
         <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-          経路マッピング(ロボット地図/経路番号)
+          番地(ロボットの地図番号 / 経路番号)
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="map-table">
             <thead>
               <tr>
-                <th>経路</th>
+                <th>番地</th>
                 <th>map_no</th>
                 <th>path_no</th>
               </tr>
             </thead>
             <tbody>
-              {building.routes.map((r) => (
-                <tr key={`${r.fromFloorId}-${r.toFloorId}`}>
-                  <td>
-                    {floorLabel(building, r.fromFloorId)} → {floorLabel(building, r.toFloorId)}
-                  </td>
-                  <td className="mono">{r.mapNo}</td>
-                  <td className="mono">{r.pathNo}</td>
+              {addresses.map((ad) => (
+                <tr key={ad.id}>
+                  <td>{ad.label}</td>
+                  <td className="mono">{master.areas.find((a) => a.id === ad.areaId)?.mapNo ?? '-'}</td>
+                  <td className="mono">{ad.pathNo}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        <div className="divider" />
-        <button className="btn btn-ghost" disabled title="将来対応予定">
-          BIMデータ読込(将来対応)
-        </button>
       </div>
 
       {/* ---------- 場所QRの発行 ---------- */}
@@ -199,7 +173,7 @@ export function Settings() {
         )}
       </div>
 
-      <SpotQrSection building={building} />
+      <AreaQrSection master={master} />
 
       {/* ---------- 荷台 ⇔ マーカーID ---------- */}
       {/* ---------- 荷台配置初期設定 ---------- */}
@@ -226,10 +200,9 @@ export function Settings() {
 
       <div className="section-label">荷台 ⇔ マーカーID 割当</div>
       <div className="stack-sm">
-        {carts.map((c) => (
-          <CartEditor key={c.id} cart={c} onSave={updateCart} />
+        {racks.map((rk) => (
+          <RackEditor key={rk.id} rack={rk} onSave={updateRack} />
         ))}
-        <AddCartRow onAdd={addCart} nextIndex={carts.length + 1} />
       </div>
 
       {/* ---------- ロボットアダプタ ---------- */}
@@ -304,10 +277,11 @@ export function Settings() {
   )
 }
 
-function CartEditor({ cart, onSave }: { cart: Cart; onSave: (c: Cart) => void }) {
-  const [label, setLabel] = useState(cart.label)
-  const [markerId, setMarkerId] = useState(cart.markerId)
-  const dirty = label !== cart.label || markerId !== cart.markerId
+function RackEditor({ rack, onSave }: { rack: Rack; onSave: (r: Rack) => void }) {
+  // 荷台にラベル列はない(表示名は marker_id から作る)。編集するのはマーカーIDだけ
+  const [markerId, setMarkerId] = useState(String(rack.markerId))
+  const dirty = markerId.trim() !== String(rack.markerId)
+  const valid = /^\d+$/.test(markerId.trim())
 
   return (
     <div className="card card-pad">
@@ -325,26 +299,27 @@ function CartEditor({ cart, onSave }: { cart: Cart; onSave: (c: Cart) => void })
         >
           <IconCart size={18} />
         </div>
-        <input
-          className="input"
-          style={{ height: 40 }}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-        />
+        <div>
+          <div style={{ fontWeight: 700 }}>{rack.label}</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {rack.addressId ? `番地${rack.addressNo}` : '搬送中 / 未設置'}
+          </div>
+        </div>
       </div>
       <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-soft)' }}>マーカーID</label>
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
         <input
           className="input mono"
           style={{ height: 44 }}
+          inputMode="numeric"
           value={markerId}
           onChange={(e) => setMarkerId(e.target.value)}
         />
         <button
           className="btn btn-blue btn-sm"
           style={{ minWidth: 64 }}
-          disabled={!dirty || !markerId.trim()}
-          onClick={() => onSave({ ...cart, label: label.trim() || cart.label, markerId: markerId.trim() })}
+          disabled={!dirty || !valid}
+          onClick={() => onSave({ ...rack, markerId: Number(markerId.trim()) })}
         >
           保存
         </button>
@@ -353,76 +328,17 @@ function CartEditor({ cart, onSave }: { cart: Cart; onSave: (c: Cart) => void })
   )
 }
 
-function AddCartRow({ onAdd, nextIndex }: { onAdd: (c: Cart) => void; nextIndex: number }) {
-  const [open, setOpen] = useState(false)
-  const [label, setLabel] = useState(`荷台 No.${nextIndex}`)
-  const [markerId, setMarkerId] = useState('')
-
-  if (!open) {
-    return (
-      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
-        <IconPlus size={18} /> 荷台を追加
-      </button>
-    )
-  }
-
-  return (
-    <div className="card card-pad">
-      <div className="field" style={{ marginBottom: 10 }}>
-        <label>荷台名</label>
-        <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} />
-      </div>
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>マーカーID</label>
-        <input
-          className="input mono"
-          placeholder="例: MK-1004"
-          value={markerId}
-          onChange={(e) => setMarkerId(e.target.value)}
-        />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setOpen(false)}>
-          キャンセル
-        </button>
-        <button
-          className="btn btn-primary btn-sm"
-          style={{ flex: 1 }}
-          disabled={!label.trim() || !markerId.trim()}
-          onClick={() => {
-            onAdd({
-              id: `cart-${Date.now().toString(36)}`,
-              label: label.trim(),
-              markerId: markerId.trim(),
-            })
-            setOpen(false)
-          }}
-        >
-          追加
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/**
- * 場所QRの発行セクション。
- * 各荷受け場/送り場に掲示するエントリーURLのQRを表示。
- * タップで現地掲示イメージ(場所名大書き+QR)の拡大モーダルを開く。
- * 建物を切り替えるとQR一覧も丸ごと入れ替わる。
- */
-function SpotQrSection({ building }: { building: BuildingProfile }) {
-  const [qrMap, setQrMap] = useState<Record<string, string>>({})
-  const [selected, setSelected] = useState<SpotDef | null>(null)
+function AreaQrSection({ master }: { master: Master }) {
+  const [qrMap, setQrMap] = useState<Record<number, string>>({})
+  const [selected, setSelected] = useState<Area | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setQrMap({})
     Promise.all(
-      building.spots.map(async (s) => {
-        const url = entryUrl(building.id, s.id)
-        const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 1 })
-        return [s.id, dataUrl] as const
+      master.areas.map(async (a) => {
+        const dataUrl = await QRCode.toDataURL(entryUrl(a.id), { width: 320, margin: 1 })
+        return [a.id, dataUrl] as const
       }),
     ).then((entries) => {
       if (!cancelled) setQrMap(Object.fromEntries(entries))
@@ -430,27 +346,28 @@ function SpotQrSection({ building }: { building: BuildingProfile }) {
     return () => {
       cancelled = true
     }
-  }, [building])
+  }, [master])
 
   return (
     <>
-      <div className="section-label">場所QRの発行</div>
+      <div className="section-label">壁QRの発行</div>
       <div className="card card-pad">
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          各荷受け場/送り場に掲示するQRです。スマホの標準カメラで読み取るとブラウザで起動し、現在地が自動確定します(インストール・事前設定は不要)。
+          エリアごとに1枚だけ掲示するQRです。スマホの標準カメラで読み取るとブラウザで起動し、
+          現在地が自動確定します(インストール・事前設定は不要)。
         </p>
         <div className="qr-grid">
-          {building.spots.map((s) => (
-            <button key={s.id} className="qr-tile" onClick={() => setSelected(s)}>
-              {qrMap[s.id] ? (
-                <img src={qrMap[s.id]} alt={`${s.label} のQR`} />
+          {master.areas.map((a) => (
+            <button key={a.id} className="qr-tile" onClick={() => setSelected(a)}>
+              {qrMap[a.id] ? (
+                <img src={qrMap[a.id]} alt={`${a.label} のQR`} />
               ) : (
                 <div className="qr-ph">
                   <IconQr size={26} />
                 </div>
               )}
-              <div className="qr-tile-name">{s.label}</div>
-              <div className="qr-tile-floor">{floorLabel(building, s.floorId)}</div>
+              <div className="qr-tile-name">{a.label}</div>
+              <div className="qr-tile-floor">{floorLabel(master, a.id)}</div>
             </button>
           ))}
         </div>
@@ -464,14 +381,14 @@ function SpotQrSection({ building }: { building: BuildingProfile }) {
             </button>
             <div className="poster-body">
               <div className="poster-floor">
-                <IconPin size={16} /> {floorLabel(building, selected.floorId)}
+                <IconPin size={16} /> {floorLabel(master, selected.id)}
               </div>
               <div className="poster-name">{selected.label}</div>
               {qrMap[selected.id] && (
                 <img className="poster-qr" src={qrMap[selected.id]} alt={`${selected.label} のQR`} />
               )}
               <div className="poster-guide">スマホのカメラで読み取ってください</div>
-              <div className="poster-sub">{building.name}</div>
+              <div className="poster-sub">{SITE_NAME}</div>
             </div>
           </div>
         </div>

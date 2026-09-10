@@ -15,7 +15,7 @@ type CamState = 'starting' | 'live' | 'denied' | 'unavailable'
 export function Scan() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { carts } = useStore()
+  const { racks } = useStore()
   // 入力画面から預かった入力内容。戻すときにそのまま返す
   const form = (location.state as { form?: Record<string, unknown> } | null)?.form
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -41,10 +41,10 @@ export function Scan() {
     const id = markerId.trim()
     if (!id) return
     // 登録済みの荷台なら、その荷台を選んだことにする
-    const cart = carts.find((c) => c.markerId.toLowerCase() === id.toLowerCase())
+    const rack = racks.find((r) => String(r.markerId) === id)
     stopCamera()
-    if (cart && form) {
-      navigate('/request', { replace: true, state: { form: { ...form, cartId: cart.id, markerId: cart.markerId } } })
+    if (rack && form) {
+      navigate('/request', { replace: true, state: { form: { ...form, cartId: rack.id, markerId: rack.markerId } } })
       return
     }
     back(id)
@@ -191,12 +191,12 @@ export function Scan() {
       {/* デモ用: 荷台を直接選択 */}
       <div className="section-label">デモ用: 荷台を選択</div>
       <div className="stack-sm">
-        {carts.map((c) => (
+        {racks.map((c) => (
           <button
             key={c.id}
             className="card card-pad row-between"
             style={{ width: '100%', textAlign: 'left' }}
-            onClick={() => resolveMarker(c.markerId)}
+            onClick={() => resolveMarker(String(c.markerId))}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div

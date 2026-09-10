@@ -8,22 +8,34 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { AppNotification, Cart, TransportRequest, TransportTask } from './types'
-import { INITIAL_CARTS } from './people'
-import type { BuildingProfile, SpotDef } from '../building/types'
-import { findRoute, floorLabel } from '../building/types'
-import { DEFAULT_BUILDING_ID, getBuilding } from '../building/sampleBuildings'
+import type { AppNotification, TransportRequest, TransportTask } from './types'
+import {
+  EMPTY_MASTER,
+  findAddress,
+  findArea,
+  findRack,
+  freeAddressesInArea,
+  toAddress,
+  toArea,
+  toRack,
+  toUser,
+  areaLabel,
+  type Address,
+  type Area,
+  type Master,
+  type Rack,
+  type User,
+} from './master'
 import { createRobotAdapter, type RobotConfig } from '../robot'
 import { isActivePhase } from './phase'
 import type { RobotStatusUpdate, RobotTransportPhase } from '../robot/types'
 
-const STORAGE_KEY = 'siteporter.state.v2'
+const STORAGE_KEY = 'siteporter.state.v3'
 
+/** localStorage に残すもの。マスタと依頼はサーバーが持つ(依頼は E3 で移す) */
 interface PersistState {
-  buildingId: string
-  /** 現在地(場所QRエントリーで確定)。localStorage永続化 */
-  currentSpotId?: string
-  carts: Cart[]
+  /** 現在地。壁QRで読んだエリア */
+  currentAreaId?: number
   tasks: TransportTask[]
   notifications: AppNotification[]
   robotConfig: RobotConfig
@@ -49,9 +61,7 @@ export const DEMO_ERROR_MESSAGE: Record<'e6' | 'e8', string> = {
 }
 
 const initialState: PersistState = {
-  buildingId: DEFAULT_BUILDING_ID,
-  currentSpotId: undefined,
-  carts: INITIAL_CARTS,
+  currentAreaId: undefined,
   tasks: [],
   notifications: [],
   robotConfig: { kind: 'mock', atmobiUrl: 'http://localhost:5000' },
@@ -71,32 +81,20 @@ function loadState(): PersistState {
 }
 
 type Action =
-  | { type: 'SET_BUILDING'; id: string }
-  | { type: 'SET_CURRENT_SPOT'; spotId?: string }
-  | { type: 'ADD_CART'; cart: Cart }
-  | { type: 'UPDATE_CART'; cart: Cart }
+  | { type: 'SET_CURRENT_AREA'; areaId?: number }
   | { type: 'SET_ROBOT_CONFIG'; config: RobotConfig }
   | { type: 'SET_DEMO_ERROR'; value: DemoError }
   | { type: 'SET_DEMO_OFFLINE'; value: boolean }
   | { type: 'ADD_TASK'; task: TransportTask }
-  | { type: 'UPDATE_TASK'; id: string; patch: Partial<TransportTask> }
+  | { type: 'UPDATE_TASK'; id: number; patch: Partial<TransportTask> }
   | { type: 'ADD_NOTIFICATION'; notification: AppNotification }
   | { type: 'MARK_NOTIF_READ'; id: string }
   | { type: 'MARK_ALL_READ' }
 
 function reducer(state: PersistState, action: Action): PersistState {
   switch (action.type) {
-    case 'SET_BUILDING':
-      return { ...state, buildingId: action.id }
-    case 'SET_CURRENT_SPOT':
-      return { ...state, currentSpotId: action.spotId }
-    case 'ADD_CART':
-      return { ...state, carts: [...state.carts, action.cart] }
-    case 'UPDATE_CART':
-      return {
-        ...state,
-        carts: state.carts.map((c) => (c.id === action.cart.id ? action.cart : c)),
-      }
+    case 'SET_CURRENT_AREA':
+      return { ...state, currentAreaId: action.areaId }
     case 'SET_ROBOT_CONFIG':
       return { ...state, robotConfig: action.config }
     case 'SET_DEMO_ERROR':
@@ -134,19 +132,24 @@ export interface Toast {
 }
 
 interface StoreContextValue extends PersistState {
-  building: BuildingProfile
-  /** 現在建物内で解決した現在地(未設定/別建物の場合 undefined) */
-  currentSpot: SpotDef | undefined
+  /** サーバーから取得したマスタ */
+  master: Master
+  areas: Area[]
+  addresses: Address[]
+  racks: Rack[]
+  users: User[]
+  masterLoaded: boolean
+  /** 現在地のエリア(未設定/未登録なら undefined。E1-2 / E1-3) */
+  currentArea: Area | undefined
   toasts: Toast[]
   unreadCount: number
   /** 受取確認が済んでいない搬送の件数(通知タブのバッジ) */
   pendingReceiptCount: number
   robotAdapterName: string
   // actions
-  setBuildingId: (id: string) => void
-  setCurrentSpot: (spotId?: string) => void
-  addCart: (cart: Cart) => void
-  updateCart: (cart: Cart) => void
+  setCurrentArea: (areaId?: number) => void
+  /** 荷台の置き場所を変える。E5 でサーバーにも送る */
+  updateRack: (rack: Rack) => void
   setRobotConfig: (config: RobotConfig) => void
   setDemoError: (value: DemoError) => void
   setDemoOffline: (value: boolean) => void
@@ -156,13 +159,13 @@ interface StoreContextValue extends PersistState {
   dismissScreenError: () => void
   /** 最後にポーリングが成功した時刻。失敗しても更新しない(E10) */
   lastFetchedAt: number
-  startTransport: (req: TransportRequest) => Promise<string>
-  cancelTask: (id: string) => Promise<void>
-  cancelRequest: (id: string, mode: 'delete' | 'reset') => Promise<void>
+  startTransport: (req: TransportRequest) => Promise<number>
+  cancelTask: (id: number) => Promise<void>
+  cancelRequest: (id: number, mode: 'delete' | 'reset') => Promise<void>
   markNotificationRead: (id: string) => void
   markAllRead: () => void
   /** 受取人が荷物を受け取ったことを確認する */
-  confirmReceipt: (taskId: string) => void
+  confirmReceipt: (taskId: number) => void
   dismissToast: (id: string) => void
   checkRobotConnection: (config: RobotConfig) => Promise<{ ok: boolean; detail: string }>
 }
@@ -171,6 +174,13 @@ const StoreContext = createContext<StoreContextValue | null>(null)
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** 依頼IDはサーバーが振る。E3 まではローカルで採番する */
+let localIdSeq = Date.now()
+function nextLocalId(): number {
+  localIdSeq += 1
+  return localIdSeq
 }
 
 const PHASE_MESSAGE: Record<RobotTransportPhase, string> = {
@@ -188,12 +198,15 @@ const PHASE_MESSAGE: Record<RobotTransportPhase, string> = {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadState)
+  const [master, setMaster] = useState<Master>(EMPTY_MASTER)
+  const [masterLoaded, setMasterLoaded] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   // 搬送状況のポーリング。成功した時刻だけを持つ。
   // 失敗してもエラーは出さず、この時刻を更新しないでおく(E10)
   const [lastFetchedAt, setLastFetchedAt] = useState(Date.now())
   // 画面遷移時の取得失敗。ポーリング断(E10)と違い、こちらは黙らずに知らせる
   const [screenError, setScreenError] = useState<string | null>(null)
+
   useEffect(() => {
     const t = setInterval(() => {
       if (!state.demoOffline) setLastFetchedAt(Date.now())
@@ -201,36 +214,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t)
   }, [state.demoOffline])
 
-  // 永続化
+  // マスタの取得。起動時に一度だけ
   useEffect(() => {
-    const toSave: PersistState = {
-      buildingId: state.buildingId,
-      currentSpotId: state.currentSpotId,
-      carts: state.carts,
-      tasks: state.tasks,
-      notifications: state.notifications,
-      robotConfig: state.robotConfig,
-      demoError: state.demoError,
-      demoOffline: state.demoOffline,
+    let cancelled = false
+    const load = async () => {
+      try {
+        const get = async (path: string) => {
+          const res = await fetch(path)
+          if (!res.ok) throw new Error(`${path} -> ${res.status}`)
+          return res.json()
+        }
+        const [a, ad, rk, us] = await Promise.all([
+          get('/api/area'),
+          get('/api/address'),
+          get('/api/rack'),
+          get('/api/user'),
+        ])
+        if (cancelled) return
+        setMaster({
+          areas: a.map(toArea),
+          addresses: ad.map(toAddress),
+          racks: rk.map(toRack),
+          users: us.map(toUser),
+        })
+        setMasterLoaded(true)
+      } catch {
+        if (!cancelled) setScreenError(SCREEN_LOAD_ERROR)
+      }
     }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 永続化(マスタは保存しない。サーバーが持つ)
+  useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
       /* ignore quota errors */
     }
   }, [state])
 
   // ロボットアダプタ(設定変更で再生成)
-  const adapter = useMemo(
-    () => createRobotAdapter(state.robotConfig),
-    [state.robotConfig],
-  )
+  const adapter = useMemo(() => createRobotAdapter(state.robotConfig), [state.robotConfig])
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
 
-  const unsubsRef = useRef<Map<string, () => void>>(new Map())
+  const unsubsRef = useRef<Map<number, () => void>>(new Map())
   /** 二重起動よけ。dispatch は即時に反映されないため */
-  const startingRef = useRef<Set<string>>(new Set())
+  const startingRef = useRef<Set<number>>(new Set())
 
   // アンマウント時に全購読解除
   useEffect(() => {
@@ -241,8 +275,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const building = getBuilding(state.buildingId)
-
   const pushToast = (t: Omit<Toast, 'id'>) => {
     const toast: Toast = { ...t, id: uid('toast') }
     setToasts((prev) => [...prev, toast])
@@ -252,6 +284,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id))
+
+  const unsubscribe = (id: number) => {
+    const un = unsubsRef.current.get(id)
+    if (un) {
+      un()
+      unsubsRef.current.delete(id)
+    }
+  }
 
   const handleUpdate = (task: TransportTask, u: RobotStatusUpdate) => {
     dispatch({
@@ -267,27 +307,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
 
     if (u.phase === 'completed') {
-      const b = getBuilding(task.buildingId)
-      const route = `${floorLabel(b, task.fromFloorId)} → ${floorLabel(b, task.toFloorId)}`
+      const route = `${areaLabel(master, task.fromAreaId)} → ${areaLabel(master, task.toAreaId)}`
       const hasRecipient = !!task.recipient && task.recipient !== '未指定'
 
       // 荷降ろしを終えて荷台の下から出た時点で、サーバーが空荷台の回収を決める。
       // 回収は搬送の続きではなく、別の依頼・別の走行として動かす。
-      // 回収そのものが終わったときは何も作らない(回収完了の通知も不要)
       if (task.kind !== 'collect') {
-        const empty = state.carts.find((c) => c.id !== task.cartId) ?? state.carts[0]
+        const empty = master.racks.find((r) => r.id !== task.rackId) ?? master.racks[0]
         if (empty) {
           void startTransport({
-            id: uid('col'),
+            id: nextLocalId(),
             kind: 'collect',
             createdBy: 'system',
             parentTaskId: task.id,
-            cartId: empty.id,
-            // 空荷台は搬送先の階にあり、集積場所へ戻す
-            fromFloorId: task.toFloorId,
-            fromSpotId: task.toSpotId,
-            toFloorId: task.fromFloorId,
-            toSpotId: task.fromSpotId,
+            rackId: empty.id,
+            // 空荷台は搬送先のエリアにあり、元のエリアへ戻す
+            fromAreaId: task.toAreaId,
+            fromAddressId: task.toAddressId,
+            toAreaId: task.fromAreaId,
+            toAddressId: task.fromAddressId,
             itemName: '',
             recipient: '',
             priority: task.priority,
@@ -295,11 +333,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       } else {
         // 回収は通知もトーストも出さない
-        const un0 = unsubsRef.current.get(task.id)
-        if (un0) {
-          un0()
-          unsubsRef.current.delete(task.id)
-        }
+        unsubscribe(task.id)
         return
       }
 
@@ -318,11 +352,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         },
       })
       // 完了のトーストは出さない。同じ内容が通知一覧に出るため
-      const un = unsubsRef.current.get(task.id)
-      if (un) {
-        un()
-        unsubsRef.current.delete(task.id)
-      }
+      unsubscribe(task.id)
     } else if (u.phase === 'error') {
       dispatch({
         type: 'ADD_NOTIFICATION',
@@ -337,15 +367,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         },
       })
       pushToast({ title: '搬送エラー', body: u.message, kind: 'error' })
-      const un = unsubsRef.current.get(task.id)
-      if (un) {
-        un()
-        unsubsRef.current.delete(task.id)
-      }
+      unsubscribe(task.id)
     }
   }
 
-  const startTransport = async (req: TransportRequest): Promise<string> => {
+  const startTransport = async (req: TransportRequest): Promise<number> => {
     // E6 / E8 は受け付けない。モーダルを出して依頼も作らない
     if ((state.demoError === 'e6' || state.demoError === 'e8') && req.kind !== 'collect') {
       throw new Error(DEMO_ERROR_MESSAGE[state.demoError])
@@ -353,13 +379,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const currentAdapter = adapterRef.current
     // E9: ロボットが実行中なら順番待ちにする
     const robotBusy = state.tasks.some((t) => isActivePhase(t.phase))
-    // E7: 搬送先に空き場所がない(デモでは設定で再現する)
-    const noSpace = state.demoError === 'e7' && req.kind !== 'collect'
+
+    // 搬送先の空き番地。番地を選ぶのはサーバーの仕事
+    const free = freeAddressesInArea(master, req.toAreaId)
+    const forcedNoSpace = state.demoError === 'e7' && req.kind !== 'collect'
+    // E7: 搬送先に空き場所がない
+    const noSpace = forcedNoSpace || (req.toAddressId === undefined && free.length === 0)
+    const toAddressId = req.toAddressId ?? (noSpace ? undefined : free[0]?.id)
+    // 出発の番地は「荷台が今どこにあるか」から決まる
+    const fromAddressId = req.fromAddressId ?? findRack(master, req.rackId)?.addressId
+
     const wait = robotBusy || noSpace
 
     const task: TransportTask = {
       ...req,
-      buildingId: building.id,
+      toAddressId,
+      fromAddressId,
       createdAt: Date.now(),
       phase: wait ? 'queued' : 'dispatching',
       progress: 0,
@@ -384,17 +419,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (startingRef.current.has(task.id)) return
     startingRef.current.add(task.id)
     const currentAdapter = adapterRef.current
-    const route = findRoute(building, task.fromFloorId, task.toFloorId)
-    if (!route) {
+
+    // 地図番号はエリアから、経路番号は行き先の番地から
+    const area = findArea(master, task.toAreaId)
+    const address = findAddress(master, task.toAddressId)
+    if (!area || !address) {
       dispatch({
         type: 'UPDATE_TASK',
         id: task.id,
-        patch: { phase: 'error', statusMessage: '該当する経路マッピングが未定義です' },
+        patch: { phase: 'error', statusMessage: '搬送先の番地が決まっていません' },
       })
       return
     }
     try {
-      const robotTaskId = await currentAdapter.startTransport(task, route)
+      const robotTaskId = await currentAdapter.startTransport(task, {
+        mapNo: area.mapNo,
+        pathNo: address.pathNo,
+      })
       dispatch({ type: 'UPDATE_TASK', id: task.id, patch: { robotTaskId } })
       const unsub = currentAdapter.subscribe(robotTaskId, (u) => handleUpdate(task, u))
       unsubsRef.current.set(task.id, unsub)
@@ -408,6 +449,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /** 順番待ちの先頭を1件走らせる。ロボットが空いたときに呼ぶ */
   const runQueued = () => {
     if (state.demoError === 'e7') return // 空き場所ができるまで待つ
+    if (!masterLoaded) return
     if (state.tasks.some((t) => isActivePhase(t.phase))) return
     const next = state.tasks
       .filter((t) => t.phase === 'queued')
@@ -433,13 +475,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * どちらでもロボットへの購読は切り、走行中なら止める。
    * エレベータ側のキャンセルは別システムなので、この操作では行えない。
    */
-  const cancelRequest = async (id: string, mode: 'delete' | 'reset') => {
+  const cancelRequest = async (id: number, mode: 'delete' | 'reset') => {
     const task = state.tasks.find((t) => t.id === id)
-    const un = unsubsRef.current.get(id)
-    if (un) {
-      un()
-      unsubsRef.current.delete(id)
-    }
+    unsubscribe(id)
     startingRef.current.delete(id)
     if (task?.robotTaskId) {
       try {
@@ -463,13 +501,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const cancelTask = async (id: string) => {
+  const cancelTask = async (id: number) => {
     const task = state.tasks.find((t) => t.id === id)
-    const un = unsubsRef.current.get(id)
-    if (un) {
-      un()
-      unsubsRef.current.delete(id)
-    }
+    unsubscribe(id)
     if (task?.robotTaskId) {
       try {
         await adapterRef.current.cancel(task.robotTaskId)
@@ -492,20 +526,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingReceiptCount = state.tasks.filter(
     (t) => !t.isDeleted && t.kind !== 'collect' && t.phase === 'completed' && !t.confirmedAt,
   ).length
-  const currentSpot = building.spots.find((s) => s.id === state.currentSpotId)
+  const currentArea = findArea(master, state.currentAreaId)
 
   const value: StoreContextValue = {
     ...state,
-    building,
-    currentSpot,
+    master,
+    areas: master.areas,
+    addresses: master.addresses,
+    racks: master.racks,
+    users: master.users,
+    masterLoaded,
+    currentArea,
     toasts,
     unreadCount,
     pendingReceiptCount,
     robotAdapterName: adapter.name,
-    setBuildingId: (id) => dispatch({ type: 'SET_BUILDING', id }),
-    setCurrentSpot: (spotId) => dispatch({ type: 'SET_CURRENT_SPOT', spotId }),
-    addCart: (cart) => dispatch({ type: 'ADD_CART', cart }),
-    updateCart: (cart) => dispatch({ type: 'UPDATE_CART', cart }),
+    setCurrentArea: (areaId) => dispatch({ type: 'SET_CURRENT_AREA', areaId }),
+    updateRack: (rack) =>
+      setMaster((m) => ({ ...m, racks: m.racks.map((r) => (r.id === rack.id ? rack : r)) })),
     setRobotConfig: (config) => dispatch({ type: 'SET_ROBOT_CONFIG', config }),
     setDemoError: (value) => dispatch({ type: 'SET_DEMO_ERROR', value }),
     setDemoOffline: (value) => {

@@ -2,15 +2,15 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
-import { floorLabel } from '../building/types'
-import type { Cart } from '../domain/types'
+import { floorLabel, SITE_NAME } from '../domain/master'
 
-/** 1行 = 1つの場所。そこに荷台があるか、あるならどのマーカーか */
+/** 1行 = 1つの番地。そこに荷台があるか、あるならどのマーカーか */
 interface Row {
-  spotId: string
-  spotLabel: string
+  addressId: number
+  addressLabel: string
   floor: string
-  markerId: string // '' = なし
+  /** 0 = なし。select は文字列を返すので数値に直して持つ */
+  markerId: number
 }
 
 /**
@@ -22,38 +22,38 @@ interface Row {
 export function RackSetup() {
   useScreenData()
   const navigate = useNavigate()
-  const { building, carts, updateCart } = useStore()
+  const { master, addresses, racks, updateRack } = useStore()
 
   const initial = useMemo<Row[]>(
     () =>
-      building.spots.map((s) => ({
-        spotId: s.id,
-        spotLabel: s.label,
-        floor: floorLabel(building, s.floorId),
-        markerId: carts.find((c) => c.spotId === s.id)?.markerId ?? '',
+      addresses.map((a) => ({
+        addressId: a.id,
+        addressLabel: a.label,
+        floor: floorLabel(master, a.areaId),
+        markerId: racks.find((r) => r.addressId === a.id)?.markerId ?? 0,
       })),
-    [building, carts],
+    [master, addresses, racks],
   )
 
   const [rows, setRows] = useState<Row[]>(initial)
   const [saved, setSaved] = useState(false)
 
-  const setRow = (spotId: string, markerId: string) => {
-    setRows((rs) => rs.map((r) => (r.spotId === spotId ? { ...r, markerId } : r)))
+  const setRow = (addressId: number, markerId: number) => {
+    setRows((rs) => rs.map((r) => (r.addressId === addressId ? { ...r, markerId } : r)))
     setSaved(false)
   }
 
   // 同じ荷台を2か所に置くことはできない
   const duplicated = rows
     .map((r) => r.markerId)
-    .filter((m, i, a) => m && a.indexOf(m) !== i)
+    .filter((m, i, a) => m !== 0 && a.indexOf(m) !== i)
 
   const apply = () => {
     // 画面の内容がそのまま配置になる。
     // 選ばれていない荷台は「どこにも置かれていない」扱いにする
-    carts.forEach((c) => {
-      const spotId = rows.find((r) => r.markerId === c.markerId)?.spotId
-      if (spotId !== c.spotId) updateCart({ ...c, spotId } as Cart)
+    racks.forEach((rk) => {
+      const addressId = rows.find((r) => r.markerId === rk.markerId)?.addressId
+      if (addressId !== rk.addressId) updateRack({ ...rk, addressId })
     })
     setSaved(true)
   }
@@ -62,7 +62,7 @@ export function RackSetup() {
     <div className="fade-in">
       <div className="page-head">
         <h1>荷台配置初期設定</h1>
-        <p>{building.name}</p>
+        <p>{SITE_NAME}</p>
       </div>
 
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
@@ -72,10 +72,10 @@ export function RackSetup() {
 
       <div className="stack-sm">
         {rows.map((r) => (
-          <div key={r.spotId} className="card card-pad">
+          <div key={r.addressId} className="card card-pad">
             <div className="row-between">
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{r.spotLabel}</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{r.addressLabel}</div>
                 <div className="muted" style={{ fontSize: 12 }}>
                   {r.floor}
                 </div>
@@ -90,12 +90,12 @@ export function RackSetup() {
               <select
                 className="select"
                 value={r.markerId}
-                onChange={(e) => setRow(r.spotId, e.target.value)}
+                onChange={(e) => setRow(r.addressId, Number(e.target.value))}
               >
-                <option value="">なし</option>
-                {carts.map((c) => (
-                  <option key={c.id} value={c.markerId}>
-                    {c.markerId}({c.label})
+                <option value={0}>なし</option>
+                {racks.map((rk) => (
+                  <option key={rk.id} value={rk.markerId}>
+                    {rk.markerId}({rk.label})
                   </option>
                 ))}
               </select>

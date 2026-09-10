@@ -1,5 +1,10 @@
 import type { TransportRequest } from '../domain/types'
-import type { RouteMapping } from '../building/types'
+
+/** ロボットに渡す走行先。地図番号はエリアから、経路番号は番地から取る */
+export interface RobotRoute {
+  mapNo: number
+  pathNo: number
+}
 
 /** ロボット搬送フェーズ(UI共通の抽象フェーズ) */
 export type RobotTransportPhase =
@@ -32,7 +37,7 @@ export interface RobotStatusUpdate {
 export interface RobotAdapter {
   readonly name: string
   /** 搬送を開始し、ロボット側タスクIDを返す */
-  startTransport(req: TransportRequest, route: RouteMapping): Promise<string>
+  startTransport(req: TransportRequest, route: RobotRoute): Promise<string>
   /** タスクの状態更新を購読する。戻り値で購読解除 */
   subscribe(taskId: string, cb: (u: RobotStatusUpdate) => void): () => void
   /** タスクをキャンセルする */

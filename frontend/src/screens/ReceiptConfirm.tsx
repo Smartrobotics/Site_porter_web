@@ -1,7 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../domain/store'
-import { floorLabel, spotLabel } from '../building/types'
-import { getBuilding } from '../building/sampleBuildings'
+import { addressLabel, areaLabel, findRack } from '../domain/master'
 
 /** 2026/09/01 12:34 */
 function stamp(ts: number): string {
@@ -18,9 +17,9 @@ function stamp(ts: number): string {
 export function ReceiptConfirm() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { tasks, carts, confirmReceipt } = useStore()
+  const { tasks, master, confirmReceipt } = useStore()
 
-  const task = tasks.find((t) => t.id === id)
+  const task = tasks.find((t) => t.id === Number(id))
   if (!task) {
     return (
       <div className="fade-in">
@@ -34,18 +33,16 @@ export function ReceiptConfirm() {
       </div>
     )
   }
-
-  const building = getBuilding(task.buildingId)
-  const cart = carts.find((c) => c.id === task.cartId)
-  const from = task.fromSpotId ? spotLabel(building, task.fromSpotId) : floorLabel(building, task.fromFloorId)
-  const to = task.toSpotId ? spotLabel(building, task.toSpotId) : floorLabel(building, task.toFloorId)
+  const rack = findRack(master, task.rackId)
+  const from = task.fromAddressId ? addressLabel(master, task.fromAddressId) : areaLabel(master, task.fromAreaId)
+  const to = task.toAddressId ? addressLabel(master, task.toAddressId) : areaLabel(master, task.toAreaId)
 
   const rows = [
     { k: '搬送完了日時', v: stamp(task.completedAt ?? task.createdAt) },
     { k: '送り状番号', v: task.trackingNo || '未入力' },
     { k: 'エリア from', v: from },
     { k: 'エリア To', v: to },
-    { k: '荷台マーカーID', v: task.markerId || cart?.markerId || '-' },
+    { k: '荷台マーカーID', v: task.markerId || rack?.markerId || '-' },
     { k: '荷物名', v: task.itemName },
     { k: '受取人', v: task.recipient || '未選択' },
   ]

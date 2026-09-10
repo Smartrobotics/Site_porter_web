@@ -31,7 +31,7 @@ export function RequestSent() {
     )
   }
 
-  const task = tasks.find((t) => t.id === state.taskId)
+  const task = tasks.find((t) => t.id === Number(state.taskId))
   // 受付だけして走らせていない場合、自分より前に並んでいる件数から順番を出す
   const queuePosition =
     task && task.phase === 'queued'
