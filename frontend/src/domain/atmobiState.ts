@@ -1,4 +1,8 @@
 /**
+ * @mobi が返す生のステータス値と、その日本語表記。
+ * scenario_bridge.py が state を返し始めたら 搬送状況画面 の rawState 行に出る。
+ */
+/**
  * @mobi (atmobi) API の状態値定義。
  * enum は tsconfig の erasableSyntaxOnly と相性が悪いため、
  * const オブジェクト + ラベルマップで表現する(値の意味は同一)。

@@ -1,4 +1,4 @@
-import type { RobotTransportPhase } from '../robot/types'
+import type { RobotTransportPhase } from '../domain/phase'
 import { phaseIndex } from '../domain/phase'
 
 interface Props {

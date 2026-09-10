@@ -1,4 +1,4 @@
-import type { RobotTransportPhase } from '../robot/types'
+import type { RobotTransportPhase } from '../domain/phase'
 import { PHASE_META, isActivePhase } from '../domain/phase'
 import type { Priority } from '../domain/types'
 import { PRIORITY_LABEL } from '../domain/types'

@@ -7,6 +7,10 @@ services:
       DB_PATH: /data/app.db
       CA_DIR: /ca
       LOG_LEVEL: INFO                # 詳しく見たいときは DEBUG
+      # ロボットの動かし方。mock = ロボット無しで時間だけ進む(開発・デモ)
+      #                    bridge = 実機。scenario_bridge.py を呼ぶ(未実装)
+      ROBOT_MODE: mock
+      ROBOT_URL: "http://127.0.0.1:8080"
       # ★要変更: スマホや他PCから使うなら、そのURLを追加する（カンマ区切り）
       #   Vite の proxy 経由なら実は不要だが、直接 8000 番を叩く場合に効く
       CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173"

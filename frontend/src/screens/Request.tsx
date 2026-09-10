@@ -39,7 +39,7 @@ interface LocationState {
 export function Request() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { racks, users, currentArea, setCurrentArea, areas, master } = useStore()
+  const { racks, users, currentArea, setCurrentArea, areas, master, tasks } = useStore()
 
   const state = (location.state as LocationState | null) ?? {}
 
@@ -68,12 +68,23 @@ export function Request() {
   // 荷台が別のエリアにある場合、その荷台は目の前に無い
   const rackElsewhere = !!rack && rack.areaId !== undefined && rack.areaId !== fromAreaId
 
+  // 送り状番号は二重送信の検査キー。送る前に気づけるようにする
+  const trackingTaken = trackingNo.trim()
+    ? tasks.find((t) => t.trackingNo === trackingNo.trim())
+    : undefined
+
   const fromUnknown = fromAreaId === 0
   const sameArea = !fromUnknown && fromAreaId === toAreaId
 
   // 荷物名は任意。搬送元と搬送先が別のエリアなら送信できる
   const canSubmit =
-    !fromUnknown && toAreaId !== 0 && !sameArea && !!rack && !markerUnknown && !rackElsewhere
+    !fromUnknown &&
+    toAreaId !== 0 &&
+    !sameArea &&
+    !!rack &&
+    !markerUnknown &&
+    !rackElsewhere &&
+    !trackingTaken
 
 
   /** いま入力されている内容。カメラへ行くときも内容確認へ行くときも同じものを渡す */
@@ -217,6 +228,11 @@ export function Request() {
           value={trackingNo}
           onChange={(e) => setTrackingNo(e.target.value)}
         />
+        {trackingTaken && (
+          <div className="muted" style={{ fontSize: 12, color: 'var(--orange-dark)', marginTop: 6 }}>
+            この送り状番号は依頼 #{trackingTaken.id} で受け付けています(二重送信の防止)
+          </div>
+        )}
       </div>
 
       {/* 優先度 */}

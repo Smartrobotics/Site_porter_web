@@ -13,11 +13,20 @@ scenario_bridge.py ができたら _advance() の中身を
 
 import asyncio
 import logging
+import os
 import sqlite3
 
 from .db import connect
 
 log = logging.getLogger(__name__)
+
+# ロボットの動かし方。docker-compose.yml の ROBOT_MODE で切り替える。
+#   mock   … 時間で断片を進めるだけ。ロボットもROSも要らない。開発とデモはこちら
+#   bridge … 実機。scenario_bridge.py に POST /scenario を投げ、GET /state で終わりを待つ
+# 画面はどちらでも同じものを見る(request.status と robot の現在位置)ので、
+# 切り替えてもフロントエンドは変わらない。
+ROBOT_MODE = os.getenv("ROBOT_MODE", "mock")
+ROBOT_URL = os.getenv("ROBOT_URL", "http://127.0.0.1:8080")
 
 TICK_SECONDS = 1.0
 # 1断片にかける秒数。デモが見やすい速さ。実機では断片の終了を待つ
@@ -358,7 +367,12 @@ def _tick_once() -> None:
 
 async def run_engine() -> None:
     """アプリの起動中ずっと回る。1秒ごとに1回だけ様子を見る"""
-    log.info("搬送エンジンを開始しました")
+    if ROBOT_MODE != "mock":
+        log.error(
+            "ROBOT_MODE=%s は未実装です(scenario_bridge.py 待ち)。mock で動かします url=%s",
+            ROBOT_MODE, ROBOT_URL,
+        )
+    log.info("搬送エンジンを開始しました mode=%s", ROBOT_MODE)
     while True:
         try:
             await asyncio.to_thread(_tick_once)

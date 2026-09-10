@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .ca import router as ca_router
 from .db import DB_PATH, get_db, init_db
-from .engine import run_engine
+from .engine import ROBOT_MODE, run_engine
 from .logging_config import setup_logging
 from .schemas import (
     AddressOut,
@@ -21,6 +21,7 @@ from .schemas import (
     RackPatch,
     RequestCreate,
     RequestOut,
+    RobotOut,
     UserOut,
 )
 
@@ -234,10 +235,21 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
     # 送り状番号は二重送信の検査キー。同じ番号が既にあれば受け付けない
     if payload.tracking_no:
         dup = db.execute(
-            "SELECT id FROM request WHERE tracking_no = ?", (payload.tracking_no,)
+            """SELECT id, created_at, is_deleted FROM request
+               WHERE tracking_no = ?""",
+            (payload.tracking_no,),
         ).fetchone()
         if dup is not None:
-            raise HTTPException(status_code=409, detail="この送り状番号はすでに受け付けています。")
+            # どの依頼が持っているかまで言う。番号だけ言われても人は確認できない
+            when = str(dup["created_at"])[:16]
+            note = "(取消済み)" if dup["is_deleted"] else ""
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"送り状番号 {payload.tracking_no} は依頼 #{dup['id']}{note} で"
+                    f"{when} に受け付けています。伝票を確認してください。"
+                ),
+            )
 
     # 受取人の名前が名簿にあれば紐づける。無くても依頼は通す
     receiver_user_id = None
@@ -500,3 +512,22 @@ def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)
     log.info("荷台配置を更新しました 件数=%s", len(items))
     rows = db.execute(RACK_LIST_SQL).fetchall()
     return [{**dict(r), "label": f"荷台{r['marker_id']}"} for r in rows]
+
+
+@app.get("/api/robot", response_model=RobotOut)
+def get_robot(db: sqlite3.Connection = Depends(get_db)):
+    """
+    ロボットの現在の様子。設定画面が読むだけで、ここから操作はしない。
+    ロボットを動かすのはエンジンの仕事。
+    """
+    row = db.execute(
+        """SELECT rb.id, rb.name, rb.phase, rb.scenario_name,
+                  rb.step_index, rb.step_total,
+                  (SELECT r.id FROM request r
+                   WHERE r.assigned_robot_id = rb.id AND r.status = 'running'
+                     AND r.is_deleted = 0 LIMIT 1) AS request_id
+           FROM robot rb WHERE rb.is_deleted = 0 ORDER BY rb.id LIMIT 1"""
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="ロボットが登録されていません")
+    return {**dict(row), "mode": ROBOT_MODE}

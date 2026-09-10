@@ -1,4 +1,4 @@
-import type { RobotTransportPhase } from '../robot/types'
+import type { RobotTransportPhase } from './phase'
 
 export type Priority = 'urgent' | 'normal' | 'low'
 

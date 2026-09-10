@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { useStore } from '../domain/store'
+import { robotPhaseLabel, useStore } from '../domain/store'
 import { floorLabel, SITE_NAME, type Area, type Master, type Rack } from '../domain/master'
-import type { RobotAdapterKind } from '../robot'
-import { IconCart, IconCheck, IconAlert, IconQr, IconClose, IconPin } from '../components/icons'
+import { IconCart, IconAlert, IconQr, IconClose, IconPin } from '../components/icons'
 
 /**
  * 壁QRのエントリーURL(スマホ標準カメラで読む → ブラウザで現在地確定)。
@@ -23,34 +22,12 @@ export function Settings() {
     addresses,
     racks,
     setRackMarker,
-    robotConfig,
-    setRobotConfig,
-    checkRobotConnection,
+    robot,
     demoError,
     setDemoError,
     demoOffline,
     setDemoOffline,
   } = useStore()
-
-  const [urlDraft, setUrlDraft] = useState(robotConfig.atmobiUrl)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null)
-
-  const chooseKind = (kind: RobotAdapterKind) => {
-    setRobotConfig({ kind, atmobiUrl: urlDraft })
-    setTestResult(null)
-  }
-
-  const runTest = async () => {
-    setTesting(true)
-    setTestResult(null)
-    const res = await checkRobotConnection({ kind: 'atmobi', atmobiUrl: urlDraft })
-    setTestResult(res)
-    setTesting(false)
-    if (robotConfig.kind === 'atmobi') {
-      setRobotConfig({ kind: 'atmobi', atmobiUrl: urlDraft })
-    }
-  }
 
   return (
     <div className="fade-in">
@@ -204,69 +181,51 @@ export function Settings() {
       </div>
 
       {/* ---------- ロボットアダプタ ---------- */}
-      <div className="section-label">ロボット連携</div>
+      <div className="section-label">ロボットの状態</div>
       <div className="card card-pad">
-        <div className="segmented" style={{ marginBottom: 14 }}>
-          <button
-            className={`seg${robotConfig.kind === 'mock' ? ' on-normal' : ''}`}
-            onClick={() => chooseKind('mock')}
-          >
-            デモ (Mock)
-            <small>ローカル疑似再生</small>
-          </button>
-          <button
-            className={`seg${robotConfig.kind === 'atmobi' ? ' on-normal' : ''}`}
-            onClick={() => chooseKind('atmobi')}
-          >
-            宅配ロボット 実機
-            <small>ロボットAPI接続</small>
-          </button>
-        </div>
-
-        {robotConfig.kind === 'atmobi' && (
-          <div className="fade-in">
-            <div className="field">
-              <label>ロボット接続先URL</label>
-              <input
-                className="input"
-                value={urlDraft}
-                onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder="http://localhost:5000"
-              />
-            </div>
-            <button className="btn btn-blue" disabled={testing} onClick={runTest}>
-              {testing ? '接続テスト中…' : '接続テスト'}
-            </button>
-
-            {testResult && (
-              <div
-                className="card-pad"
-                style={{
-                  marginTop: 12,
-                  borderRadius: 12,
-                  display: 'flex',
-                  gap: 10,
-                  alignItems: 'flex-start',
-                  background: testResult.ok ? 'var(--green-tint)' : '#fdeaea',
-                  color: testResult.ok ? 'var(--green-dark)' : '#c62828',
-                }}
-              >
-                {testResult.ok ? <IconCheck size={20} /> : <IconAlert size={20} />}
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>
-                    {testResult.ok ? '接続成功' : '接続失敗'}
-                  </div>
-                  <div style={{ fontSize: 12.5, marginTop: 2 }}>{testResult.detail}</div>
-                </div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          搬送を走らせるのはサーバーです。この画面は状態を読むだけで、ここから操作はしません。
+          実機かモックかは docker-compose.yml の ROBOT_MODE で決まります。
+        </p>
+        {robot ? (
+          <>
+            {[
+              { k: 'ロボット', v: robot.name },
+              { k: '状態', v: robotPhaseLabel(robot.phase) },
+              {
+                k: '実行中の断片',
+                v: robot.scenarioName
+                  ? `${robot.scenarioName} (${robot.stepIndex}/${robot.stepTotal})`
+                  : '—',
+              },
+              {
+                k: '動かし方',
+                v: robot.mode === 'mock' ? 'モック(ロボット無し)' : `実機 (${robot.mode})`,
+              },
+            ].map((r) => (
+              <div key={r.k} className="row-between" style={{ padding: '6px 0' }}>
+                <span className="muted" style={{ fontSize: 13 }}>
+                  {r.k}
+                </span>
+                <span style={{ fontWeight: 700, fontSize: 13 }} className="mono">
+                  {r.v}
+                </span>
               </div>
+            ))}
+            {robot.requestId !== null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ marginTop: 10 }}
+                onClick={() => navigate(`/task/${robot.requestId}`)}
+              >
+                実行中の搬送状況を見る
+              </button>
             )}
-          </div>
-        )}
-
-        {robotConfig.kind === 'mock' && (
-          <div className="muted" style={{ fontSize: 12.5 }}>
-            デモモードでは搬送フェーズをローカルで疑似再生します。実機接続は不要です。
-          </div>
+          </>
+        ) : (
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            状態を取得できていません。
+          </p>
         )}
       </div>
 

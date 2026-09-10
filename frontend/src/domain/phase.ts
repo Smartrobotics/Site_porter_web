@@ -1,4 +1,24 @@
-import type { RobotTransportPhase } from '../robot/types'
+/**
+ * 搬送の進み方を表す語彙。画面はこの言葉でしか進行を語らない。
+ *
+ * サーバーが返すのは request.status とロボットの断片番号だけで、
+ * ここへの読み替えは domain/mapping.ts が行う。
+ * もとは robot/ に置いていたが、ロボットはサーバー側に移ったので、
+ * これは「表示のための言葉」として domain に置く。
+ */
+export type RobotTransportPhase =
+  | 'idle'
+  /** 受付済みだがまだ走っていない(サーバー側の待ち) */
+  | 'queued'
+  | 'dispatching'
+  | 'loading'
+  | 'transporting'
+  | 'arrived'
+  | 'returning'
+  | 'completed'
+  | 'error'
+  /** 管理者が取り消した */
+  | 'cancelled'
 
 export interface PhaseMeta {
   label: string

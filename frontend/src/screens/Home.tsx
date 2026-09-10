@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useStore } from '../domain/store'
+import { robotPhaseLabel, useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
 import { TaskCard } from '../components/TaskCard'
 import { IconCart, IconPlus, IconRobot } from '../components/icons'
@@ -9,13 +9,14 @@ import { isActivePhase } from '../domain/phase'
 export function Home() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, robotConfig, robotAdapterName } = useStore()
+  const { tasks, robot } = useStore()
 
   const visible = tasks.filter((t) => !t.isDeleted)
   const active = visible.filter((t) => isActivePhase(t.phase))
   const finished = visible.filter((t) => !isActivePhase(t.phase))
 
-  const isMock = robotConfig.kind === 'mock'
+  // サーバーがロボット無し(モック)で動いているかどうか
+  const isMock = robot?.mode === 'mock'
 
   return (
     <div>
@@ -51,9 +52,11 @@ export function Home() {
             <IconRobot />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>{robotAdapterName}</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>
+              {robot ? robotPhaseLabel(robot.phase) : '—'}
+            </div>
             <div className="muted" style={{ fontSize: 12 }}>
-              ロボット連携
+              {robot?.name ?? 'ロボット'}
             </div>
           </div>
         </div>

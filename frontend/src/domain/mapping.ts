@@ -9,7 +9,7 @@
 
 import type { TransportTask } from './types'
 import { PRIORITY_FROM_DB } from './types'
-import type { RobotTransportPhase } from '../robot/types'
+import type { RobotTransportPhase } from './phase'
 
 /** GET /api/request が返す1行 */
 export interface RequestRaw {

@@ -8,7 +8,7 @@ import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
 import { TIMELINE_STEPS, phaseIndex } from '../domain/phase'
 import { IconChevron, IconCheck, IconAlert, IconArrow } from '../components/icons'
-import { stateLabel } from '../robot/atmobiTypes'
+import { stateLabel } from '../domain/atmobiState'
 import { formatTime } from '../lib/format'
 
 export function TaskDetail() {

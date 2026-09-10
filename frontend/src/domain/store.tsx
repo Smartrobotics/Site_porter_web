@@ -26,7 +26,43 @@ import {
   type User,
 } from './master'
 import { toTask, type RequestRaw } from './mapping'
-import { createRobotAdapter, type RobotConfig } from '../robot'
+
+/** GET /api/robot。ロボットを動かすのはサーバー。画面は読むだけ */
+export interface RobotState {
+  id: number
+  name: string
+  phase: string
+  scenarioName: string | null
+  stepIndex: number | null
+  stepTotal: number | null
+  /** いま走っている依頼 */
+  requestId: number | null
+  /** mock = ロボット無しで時間だけ進む。docker-compose.yml の ROBOT_MODE で決まる */
+  mode: string
+}
+
+interface RobotRaw {
+  id: number
+  name: string
+  phase: string
+  scenario_name: string | null
+  step_index: number | null
+  step_total: number | null
+  request_id: number | null
+  mode: string
+}
+
+const ROBOT_PHASE_LABEL: Record<string, string> = {
+  idle: '待機中',
+  delivery: '搬送中',
+  return: '空荷台を回収中',
+  homing: '戻り中',
+  error: 'エラー',
+}
+
+export function robotPhaseLabel(phase: string): string {
+  return ROBOT_PHASE_LABEL[phase] ?? phase
+}
 
 const STORAGE_KEY = 'siteporter.state.v4'
 /** 搬送状況のポーリング間隔 */
@@ -39,7 +75,6 @@ const POLL_MS = 3000
 interface PersistState {
   /** 現在地。壁QRで読んだエリア */
   currentAreaId?: number
-  robotConfig: RobotConfig
   /** デモ用。搬送依頼の送信を必ず失敗させ、エラーモーダルを見せるための設定 */
   demoError: DemoError
   /** デモ用。true の間はポーリングが失敗し続ける(E10 の再現) */
@@ -65,7 +100,6 @@ export const DEMO_ERROR_MESSAGE: Record<'e6' | 'e8', string> = {
 
 const initialState: PersistState = {
   currentAreaId: undefined,
-  robotConfig: { kind: 'mock', atmobiUrl: 'http://localhost:5000' },
   demoError: 'none',
   demoOffline: false,
 }
@@ -82,7 +116,6 @@ function loadState(): PersistState {
 
 type Action =
   | { type: 'SET_CURRENT_AREA'; areaId?: number }
-  | { type: 'SET_ROBOT_CONFIG'; config: RobotConfig }
   | { type: 'SET_DEMO_ERROR'; value: DemoError }
   | { type: 'SET_DEMO_OFFLINE'; value: boolean }
 
@@ -90,8 +123,6 @@ function reducer(state: PersistState, action: Action): PersistState {
   switch (action.type) {
     case 'SET_CURRENT_AREA':
       return { ...state, currentAreaId: action.areaId }
-    case 'SET_ROBOT_CONFIG':
-      return { ...state, robotConfig: action.config }
     case 'SET_DEMO_ERROR':
       return { ...state, demoError: action.value }
     case 'SET_DEMO_OFFLINE':
@@ -118,19 +149,19 @@ interface StoreContextValue extends PersistState {
   masterLoaded: boolean
   /** 搬送依頼。サーバーが唯一の正しい値。ポーリングで取り直す */
   tasks: TransportTask[]
+  /** ロボットの現在の様子。取得できていなければ null */
+  robot: RobotState | null
   /** 現在地のエリア(未設定/未登録なら undefined。E1-2 / E1-3) */
   currentArea: Area | undefined
   toasts: Toast[]
   /** 受取確認が済んでいない搬送の件数(通知タブのバッジ) */
   pendingReceiptCount: number
-  robotAdapterName: string
   // actions
   setCurrentArea: (areaId?: number) => void
   /** 荷台のマーカーIDを付け替える */
   setRackMarker: (rackId: number, markerId: number) => Promise<void>
   /** 荷台配置をまとめて反映する。1台ずつだと入れ替えが途中で衝突する */
   savePlacement: (items: { rackId: number; addressId: number }[]) => Promise<void>
-  setRobotConfig: (config: RobotConfig) => void
   setDemoError: (value: DemoError) => void
   setDemoOffline: (value: boolean) => void
   /** 画面遷移時の取得に失敗した(共通モーダルを出す) */
@@ -145,7 +176,6 @@ interface StoreContextValue extends PersistState {
   /** 受取人が荷物を受け取ったことを確認する */
   confirmReceipt: (taskId: number) => void
   dismissToast: (id: string) => void
-  checkRobotConnection: (config: RobotConfig) => Promise<{ ok: boolean; detail: string }>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -174,6 +204,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [master, setMaster] = useState<Master>(EMPTY_MASTER)
   const [masterLoaded, setMasterLoaded] = useState(false)
   const [raws, setRaws] = useState<RequestRaw[]>([])
+  const [robot, setRobot] = useState<RobotState | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   // ポーリングが最後に成功した時刻。失敗しても更新しない(E10)
   const [lastFetchedAt, setLastFetchedAt] = useState(Date.now())
@@ -203,11 +234,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (offlineRef.current) return
     try {
-      const [reqRes, rackRes] = await Promise.all([fetch('/api/request'), fetch('/api/rack')])
-      if (!reqRes.ok || !rackRes.ok) throw new Error('fetch failed')
-      const [requests, racks] = await Promise.all([reqRes.json(), rackRes.json()])
+      const [reqRes, rackRes, robotRes] = await Promise.all([
+        fetch('/api/request'),
+        fetch('/api/rack'),
+        fetch('/api/robot'),
+      ])
+      if (!reqRes.ok || !rackRes.ok || !robotRes.ok) throw new Error('fetch failed')
+      const [requests, racks, rb] = await Promise.all([
+        reqRes.json(),
+        rackRes.json(),
+        robotRes.json() as Promise<RobotRaw>,
+      ])
       setRaws(requests)
       setMaster((m) => ({ ...m, racks: racks.map(toRack) }))
+      setRobot({
+        id: rb.id,
+        name: rb.name,
+        phase: rb.phase,
+        scenarioName: rb.scenario_name,
+        stepIndex: rb.step_index,
+        stepTotal: rb.step_total,
+        requestId: rb.request_id,
+        mode: rb.mode,
+      })
       setLastFetchedAt(Date.now())
     } catch {
       // E10: ポーリング断はエラーを出さない。取得時刻が止まることで人に伝わる
@@ -263,9 +312,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /* ignore quota errors */
     }
   }, [state])
-
-  // ロボット接続テスト用。搬送そのものはサーバーが走らせる
-  const adapter = useMemo(() => createRobotAdapter(state.robotConfig), [state.robotConfig])
 
   const tasks = useMemo(
     () =>
@@ -334,9 +380,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })()
   }
 
-  const checkRobotConnection = (config: RobotConfig) =>
-    createRobotAdapter(config).checkConnection()
-
   // 回収は受取確認の対象外(荷台回収完了の通知は出さない)
   const pendingReceiptCount = tasks.filter(
     (t) => t.kind !== 'collect' && t.phase === 'completed' && !t.confirmedAt,
@@ -352,10 +395,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     users: master.users,
     masterLoaded,
     tasks,
+    robot,
     currentArea,
     toasts,
     pendingReceiptCount,
-    robotAdapterName: adapter.name,
     setCurrentArea: (areaId) => dispatch({ type: 'SET_CURRENT_AREA', areaId }),
     setRackMarker: async (rackId, markerId) => {
       const res = await fetch(`/api/rack/${rackId}`, {
@@ -379,7 +422,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!res.ok) throw new Error(data?.detail ?? `PUT placement -> ${res.status}`)
       await refresh()
     },
-    setRobotConfig: (config) => dispatch({ type: 'SET_ROBOT_CONFIG', config }),
     setDemoError: (value) => dispatch({ type: 'SET_DEMO_ERROR', value }),
     setDemoOffline: (value) => {
       if (!value) setScreenError(null)
@@ -394,7 +436,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cancelRequest,
     confirmReceipt,
     dismissToast,
-    checkRobotConnection,
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

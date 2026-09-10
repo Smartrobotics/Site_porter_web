@@ -105,3 +105,17 @@ class PlacementIn(BaseModel):
     途中で「その番地は使用中」に当たってしまうので、全体を1回の処理で反映する。
     """
     items: list[PlacementItem]
+
+
+class RobotOut(BaseModel):
+    """ロボットの現在の様子。画面は読むだけ。"""
+    id: int
+    name: str
+    phase: str
+    scenario_name: str | None
+    step_index: int | None
+    step_total: int | None
+    # いま走っている依頼(あれば)
+    request_id: int | None
+    # サーバーがどちらで動いているか。mock = ロボット無しで時間だけ進む
+    mode: str
