@@ -22,7 +22,7 @@ export function Settings() {
     areas,
     addresses,
     racks,
-    updateRack,
+    setRackMarker,
     robotConfig,
     setRobotConfig,
     checkRobotConnection,
@@ -199,7 +199,7 @@ export function Settings() {
       <div className="section-label">荷台 ⇔ マーカーID 割当</div>
       <div className="stack-sm">
         {racks.map((rk) => (
-          <RackEditor key={rk.id} rack={rk} onSave={updateRack} />
+          <RackEditor key={rk.id} rack={rk} onSave={setRackMarker} />
         ))}
       </div>
 
@@ -275,11 +275,27 @@ export function Settings() {
   )
 }
 
-function RackEditor({ rack, onSave }: { rack: Rack; onSave: (r: Rack) => void }) {
+function RackEditor({
+  rack,
+  onSave,
+}: {
+  rack: Rack
+  onSave: (rackId: number, markerId: number) => Promise<void>
+}) {
   // 荷台にラベル列はない(表示名は marker_id から作る)。編集するのはマーカーIDだけ
   const [markerId, setMarkerId] = useState(String(rack.markerId))
+  const [error, setError] = useState<string | null>(null)
   const dirty = markerId.trim() !== String(rack.markerId)
   const valid = /^\d+$/.test(markerId.trim())
+
+  const save = async () => {
+    setError(null)
+    try {
+      await onSave(rack.id, Number(markerId.trim()))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存できませんでした')
+    }
+  }
 
   return (
     <div className="card card-pad">
@@ -317,11 +333,16 @@ function RackEditor({ rack, onSave }: { rack: Rack; onSave: (r: Rack) => void })
           className="btn btn-blue btn-sm"
           style={{ minWidth: 64 }}
           disabled={!dirty || !valid}
-          onClick={() => onSave({ ...rack, markerId: Number(markerId.trim()) })}
+          onClick={() => void save()}
         >
           保存
         </button>
       </div>
+      {error && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 6, color: 'var(--orange-dark)' }}>
+          {error}
+        </div>
+      )}
     </div>
   )
 }

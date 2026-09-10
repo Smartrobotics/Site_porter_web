@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import type { Priority } from '../domain/types'
-import { SITE_NAME, type Area } from '../domain/master'
+import { areaLabel, SITE_NAME, type Area } from '../domain/master'
 import { IconArrow, IconCamera } from '../components/icons'
 import { LocationBadge } from '../components/LocationBadge'
 
@@ -39,10 +39,9 @@ interface LocationState {
 export function Request() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { racks, users, currentArea, setCurrentArea, areas } = useStore()
+  const { racks, users, currentArea, setCurrentArea, areas, master } = useStore()
 
   const state = (location.state as LocationState | null) ?? {}
-  const rack = racks.find((r) => r.id === (state.form?.rackId ?? state.rackId)) ?? racks[0]
 
   // 「戻る」で返ってきたときは入力内容を復元する。
   // 初回は搬送元を現在地(壁QR由来)で初期化する
@@ -55,17 +54,26 @@ export function Request() {
 
   const [fromAreaId, setFromAreaId] = useState(initialFrom)
   const [toAreaId, setToAreaId] = useState(initialTo)
-  const [markerId, setMarkerId] = useState(back?.markerId ?? String(rack?.markerId ?? ''))
+  // 最初はどれでもよいので先頭の荷台。カメラで読んだらそのマーカーが入る
+  const initialRack = racks.find((r) => r.id === (back?.rackId ?? state.rackId)) ?? racks[0]
+  const [markerId, setMarkerId] = useState(back?.markerId ?? String(initialRack?.markerId ?? ''))
   const [trackingNo, setTrackingNo] = useState(back?.trackingNo ?? '')
   const [itemName, setItemName] = useState(back?.itemName ?? '')
   const [recipient, setRecipient] = useState(back?.recipient ?? '')
   const [priority, setPriority] = useState<Priority>(back?.priority ?? 'normal')
 
+  // 運ぶ荷台はマーカーIDで決まる。手入力でもカメラでも同じ
+  const rack = racks.find((r) => String(r.markerId) === markerId.trim())
+  const markerUnknown = markerId.trim() !== '' && !rack
+  // 荷台が別のエリアにある場合、その荷台は目の前に無い
+  const rackElsewhere = !!rack && rack.areaId !== undefined && rack.areaId !== fromAreaId
+
   const fromUnknown = fromAreaId === 0
   const sameArea = !fromUnknown && fromAreaId === toAreaId
 
   // 荷物名は任意。搬送元と搬送先が別のエリアなら送信できる
-  const canSubmit = !fromUnknown && toAreaId !== 0 && !sameArea
+  const canSubmit =
+    !fromUnknown && toAreaId !== 0 && !sameArea && !!rack && !markerUnknown && !rackElsewhere
 
 
   /** いま入力されている内容。カメラへ行くときも内容確認へ行くときも同じものを渡す */
@@ -110,10 +118,21 @@ export function Request() {
         <label>マーカーID</label>
         <input
           className="input"
+          inputMode="numeric"
           value={markerId}
           onChange={(e) => setMarkerId(e.target.value)}
           aria-label="マーカーID"
         />
+        {markerUnknown && (
+          <div className="muted" style={{ fontSize: 12, color: 'var(--orange-dark)', marginTop: 6 }}>
+            マーカーID {markerId.trim()} の荷台は登録されていません
+          </div>
+        )}
+        {rackElsewhere && (
+          <div className="muted" style={{ fontSize: 12, color: 'var(--orange-dark)', marginTop: 6 }}>
+            この荷台は {areaLabel(master, rack!.areaId)} にあります。搬送元を選び直してください
+          </div>
+        )}
       </div>
 
       {/* 伝票QRコード読み取り */}

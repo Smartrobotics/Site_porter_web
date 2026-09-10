@@ -22,7 +22,7 @@ interface Row {
 export function RackSetup() {
   useScreenData()
   const navigate = useNavigate()
-  const { master, addresses, racks, updateRack } = useStore()
+  const { master, addresses, racks, savePlacement } = useStore()
 
   const initial = useMemo<Row[]>(
     () =>
@@ -37,25 +37,46 @@ export function RackSetup() {
 
   const [rows, setRows] = useState<Row[]>(initial)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const setRow = (addressId: number, markerId: number) => {
     setRows((rs) => rs.map((r) => (r.addressId === addressId ? { ...r, markerId } : r)))
     setSaved(false)
+    setError(null)
   }
+
+  /** 搬送中の荷台は番地に載っていない。この画面では動かせない */
+  const inTransit = racks.filter((r) => r.addressId === undefined)
+  /** 置き場所が選ばれていない荷台。サーバーは「置き場所のない荷台」を許さない */
+  const unplaced = racks.filter(
+    (r) => r.addressId !== undefined && !rows.some((row) => row.markerId === r.markerId),
+  )
 
   // 同じ荷台を2か所に置くことはできない
   const duplicated = rows
     .map((r) => r.markerId)
     .filter((m, i, a) => m !== 0 && a.indexOf(m) !== i)
 
-  const apply = () => {
-    // 画面の内容がそのまま配置になる。
-    // 選ばれていない荷台は「どこにも置かれていない」扱いにする
-    racks.forEach((rk) => {
-      const addressId = rows.find((r) => r.markerId === rk.markerId)?.addressId
-      if (addressId !== rk.addressId) updateRack({ ...rk, addressId })
-    })
-    setSaved(true)
+  const apply = async () => {
+    setSaving(true)
+    setError(null)
+    // 画面の内容をそのまま配置として送る。1台ずつではなく一度に。
+    // 入れ替え(AをBの場所へ、BをAの場所へ)を途中で衝突させないため
+    const items = rows
+      .filter((r) => r.markerId !== 0)
+      .map((r) => ({
+        rackId: racks.find((rk) => rk.markerId === r.markerId)?.id ?? 0,
+        addressId: r.addressId,
+      }))
+      .filter((i) => i.rackId !== 0)
+    try {
+      await savePlacement(items)
+      setSaved(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '設定できませんでした')
+    }
+    setSaving(false)
   }
 
   return (
@@ -110,6 +131,26 @@ export function RackSetup() {
         </div>
       )}
 
+      {unplaced.length > 0 && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 10, color: 'var(--orange-dark)' }}>
+          置き場所が選ばれていない荷台があります(マーカーID:{' '}
+          {unplaced.map((r) => r.markerId).join(', ')})。すべての荷台に番地を割り当ててください。
+        </div>
+      )}
+
+      {inTransit.length > 0 && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>
+          搬送中の荷台はこの画面では動かせません(マーカーID:{' '}
+          {inTransit.map((r) => r.markerId).join(', ')})
+        </div>
+      )}
+
+      {error && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 10, color: 'var(--orange-dark)' }}>
+          {error}
+        </div>
+      )}
+
       {saved && (
         <div className="muted" style={{ fontSize: 12.5, marginTop: 10, color: 'var(--green-dark)' }}>
           設定しました。
@@ -119,10 +160,10 @@ export function RackSetup() {
       <button
         className="btn btn-primary"
         style={{ marginTop: 14 }}
-        disabled={duplicated.length > 0}
-        onClick={apply}
+        disabled={duplicated.length > 0 || unplaced.length > 0 || saving}
+        onClick={() => void apply()}
       >
-        設定する
+        {saving ? '設定しています…' : '設定する'}
       </button>
       <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => navigate('/settings')}>
         キャンセル

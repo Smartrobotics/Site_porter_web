@@ -87,3 +87,21 @@ class CancelIn(BaseModel):
       delete … 画面から消す。記録は is_deleted で残す
     """
     mode: Literal["abort", "reset", "delete"]
+
+
+class RackPatch(BaseModel):
+    """荷台のマーカーIDを付け替える。汎用マーカー要件でユーザーが自由に変えられる。"""
+    marker_id: int = Field(ge=1)
+
+
+class PlacementItem(BaseModel):
+    rack_id: int
+    street_address_id: int
+
+
+class PlacementIn(BaseModel):
+    """
+    荷台配置をまとめて入れ替える。1台ずつ動かすと入れ替え(AをBの場所へ、BをAの場所へ)が
+    途中で「その番地は使用中」に当たってしまうので、全体を1回の処理で反映する。
+    """
+    items: list[PlacementItem]

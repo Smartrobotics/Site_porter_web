@@ -126,8 +126,10 @@ interface StoreContextValue extends PersistState {
   robotAdapterName: string
   // actions
   setCurrentArea: (areaId?: number) => void
-  /** 荷台の置き場所を変える。サーバーへの反映は未実装(PATCH /api/rack) */
-  updateRack: (rack: Rack) => void
+  /** 荷台のマーカーIDを付け替える */
+  setRackMarker: (rackId: number, markerId: number) => Promise<void>
+  /** 荷台配置をまとめて反映する。1台ずつだと入れ替えが途中で衝突する */
+  savePlacement: (items: { rackId: number; addressId: number }[]) => Promise<void>
   setRobotConfig: (config: RobotConfig) => void
   setDemoError: (value: DemoError) => void
   setDemoOffline: (value: boolean) => void
@@ -191,13 +193,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id))
 
-  /** 依頼を取り直す。成功したときだけ時刻を進める */
+  /**
+   * 依頼と荷台を取り直す。成功したときだけ時刻を進める。
+   *
+   * 荷台も毎回取る。走行ごとに置き場所が変わるので、開いたときの1回では
+   * すぐ古くなる。古い位置で「この荷台は別のエリアにあります」と止めてしまう。
+   * エリア・番地・受取人は動かないので、こちらは起動時の1回だけ。
+   */
   const refresh = useCallback(async () => {
     if (offlineRef.current) return
     try {
-      const res = await fetch('/api/request')
-      if (!res.ok) throw new Error(String(res.status))
-      setRaws(await res.json())
+      const [reqRes, rackRes] = await Promise.all([fetch('/api/request'), fetch('/api/rack')])
+      if (!reqRes.ok || !rackRes.ok) throw new Error('fetch failed')
+      const [requests, racks] = await Promise.all([reqRes.json(), rackRes.json()])
+      setRaws(requests)
+      setMaster((m) => ({ ...m, racks: racks.map(toRack) }))
       setLastFetchedAt(Date.now())
     } catch {
       // E10: ポーリング断はエラーを出さない。取得時刻が止まることで人に伝わる
@@ -347,8 +357,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pendingReceiptCount,
     robotAdapterName: adapter.name,
     setCurrentArea: (areaId) => dispatch({ type: 'SET_CURRENT_AREA', areaId }),
-    updateRack: (rack) =>
-      setMaster((m) => ({ ...m, racks: m.racks.map((r) => (r.id === rack.id ? rack : r)) })),
+    setRackMarker: async (rackId, markerId) => {
+      const res = await fetch(`/api/rack/${rackId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ marker_id: markerId }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.detail ?? `PATCH /api/rack -> ${res.status}`)
+      await refresh()
+    },
+    savePlacement: async (items) => {
+      const res = await fetch('/api/rack/placement', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map((i) => ({ rack_id: i.rackId, street_address_id: i.addressId })),
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.detail ?? `PUT placement -> ${res.status}`)
+      await refresh()
+    },
     setRobotConfig: (config) => dispatch({ type: 'SET_ROBOT_CONFIG', config }),
     setDemoError: (value) => dispatch({ type: 'SET_DEMO_ERROR', value }),
     setDemoOffline: (value) => {

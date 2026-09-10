@@ -16,7 +16,9 @@ from .schemas import (
     AddressOut,
     AreaOut,
     CancelIn,
+    PlacementIn,
     RackOut,
+    RackPatch,
     RequestCreate,
     RequestOut,
     UserOut,
@@ -194,14 +196,40 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
     """
     # 出発の番地は「荷台が今どこにあるか」で決まる。人は選ばない
     rack = db.execute(
-        "SELECT id, street_address_id FROM rack WHERE id = ? AND is_deleted = 0",
+        """SELECT rk.id, rk.street_address_id, rk.marker_id,
+                  sa.area_id AS rack_area_id, a.label AS rack_area_label
+           FROM rack rk
+           LEFT JOIN street_address sa ON sa.id = rk.street_address_id
+           LEFT JOIN area a ON a.id = sa.area_id
+           WHERE rk.id = ? AND rk.is_deleted = 0""",
         (payload.rack_id,),
     ).fetchone()
     if rack is None:
         raise HTTPException(status_code=400, detail="荷台が見つかりません")
-    if rack["street_address_id"] is None:
-        # 搬送中の荷台は指定できない(E8)
-        raise HTTPException(status_code=409, detail="指定された荷台は使用中です。別の荷台を選んでください。")
+    # 1台の荷台が同時に持てる走行は1つ(E8)。
+    # 搬送中(番地から外れている)でも、順番待ちが入っているでも同じく断る
+    busy = db.execute(
+        """SELECT id FROM request
+           WHERE rack_id = ? AND is_deleted = 0 AND status IN ('queued', 'running')
+           LIMIT 1""",
+        (payload.rack_id,),
+    ).fetchone()
+    if rack["street_address_id"] is None or busy is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="指定された荷台は使用中です。別の荷台を選んでください。",
+        )
+
+    # 搬送元は「荷台が今どこにあるか」で決まる。人が選んだエリアと食い違うなら、
+    # 目の前に無い荷台を指定している。DBのトリガーも弾くが、その文面は人に読めない
+    if rack["rack_area_id"] is not None and rack["rack_area_id"] != payload.from_area_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"荷台{rack['marker_id']}は{rack['rack_area_label']}にあります。"
+                "搬送元を選び直すか、別の荷台を指定してください。"
+            ),
+        )
 
     # 送り状番号は二重送信の検査キー。同じ番号が既にあれば受け付けない
     if payload.tracking_no:
@@ -291,7 +319,8 @@ def cancel_request(
     (どこに置いたか分からないので、荷台配置初期設定で人が直す)。
     """
     row = db.execute(
-        "SELECT id, status, rack_id FROM request WHERE id = ? AND is_deleted = 0",
+        """SELECT id, status, rack_id, from_address_id
+           FROM request WHERE id = ? AND is_deleted = 0""",
         (request_id,),
     ).fetchone()
     if row is None:
@@ -319,13 +348,17 @@ def cancel_request(
             (request_id,),
         )
 
-    # 走行中だったならロボットを解放する
+    # 走行中だったならロボットを解放し、荷台を出発した番地に戻す。
+    # 実際には荷台はロボットの下のどこかにあるが、番地なしのまま残すと
+    # その荷台は二度と選べなくなる(POST が「使用中」で断る)。
+    # 出発地に戻す方が現実に近く、違っていれば荷台配置初期設定で人が直せる。
     if row["status"] == "running":
         db.execute(
             """UPDATE robot SET phase = 'idle', scenario_name = NULL,
                                 step_index = NULL, step_total = NULL
                WHERE id = 1"""
         )
+        _park_rack(db, row["rack_id"], row["from_address_id"])
     db.commit()
     log.info("依頼を取消しました id=%s mode=%s", request_id, payload.mode)
 
@@ -337,3 +370,133 @@ def cancel_request(
             ).fetchone()
         )
     return dict(db.execute(REQUEST_ONE_SQL, (request_id,)).fetchone())
+
+
+def _park_rack(db: sqlite3.Connection, rack_id: int, prefer_address_id: int | None) -> None:
+    """
+    行き先を失った荷台を、どこかの空き番地に置く。
+    まず出発した番地、それが埋まっていれば空いている番地を若い順に。
+    どこも空いていなければ番地なしのまま残す(そのときは人が動かすしかない)。
+    """
+    candidates: list[int] = []
+    if prefer_address_id is not None:
+        candidates.append(prefer_address_id)
+    rows = db.execute(
+        """SELECT sa.id FROM street_address sa
+           WHERE sa.is_deleted = 0
+             AND NOT EXISTS (SELECT 1 FROM rack WHERE street_address_id = sa.id)
+           ORDER BY sa.area_id, sa.address_no"""
+    ).fetchall()
+    candidates.extend(r["id"] for r in rows)
+
+    for address_id in candidates:
+        try:
+            db.execute(
+                "UPDATE rack SET street_address_id = ? WHERE id = ?", (address_id, rack_id)
+            )
+            log.info("荷台を番地に戻しました 荷台=%s 番地=%s", rack_id, address_id)
+            return
+        except sqlite3.IntegrityError:
+            continue
+    log.warning("空き番地が無く荷台を置けませんでした 荷台=%s", rack_id)
+
+
+RACK_ONE_SQL = f"""
+SELECT rk.id, rk.marker_id, rk.street_address_id, rk.is_empty,
+       sa.area_id, sa.address_no
+FROM rack rk
+LEFT JOIN street_address sa ON sa.id = rk.street_address_id
+WHERE rk.id = ?
+"""
+
+
+def _rack_out(db: sqlite3.Connection, rack_id: int) -> dict:
+    row = db.execute(RACK_ONE_SQL, (rack_id,)).fetchone()
+    return {**dict(row), "label": f"荷台{row['marker_id']}"}
+
+
+def _in_transit(db: sqlite3.Connection, rack_id: int) -> bool:
+    """走行中の依頼を持っている荷台。いまロボットの下にあるので動かせない"""
+    row = db.execute(
+        """SELECT 1 FROM request
+           WHERE rack_id = ? AND is_deleted = 0 AND status = 'running' LIMIT 1""",
+        (rack_id,),
+    ).fetchone()
+    return row is not None
+
+
+@app.patch("/api/rack/{rack_id}", response_model=RackOut)
+def patch_rack(rack_id: int, payload: RackPatch, db: sqlite3.Connection = Depends(get_db)):
+    rack = db.execute("SELECT id FROM rack WHERE id = ? AND is_deleted = 0", (rack_id,)).fetchone()
+    if rack is None:
+        raise HTTPException(status_code=404, detail="荷台が見つかりません")
+
+    used = db.execute(
+        "SELECT id FROM rack WHERE marker_id = ? AND id <> ? AND is_deleted = 0",
+        (payload.marker_id, rack_id),
+    ).fetchone()
+    if used is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"マーカーID {payload.marker_id} は別の荷台で使われています。",
+        )
+
+    db.execute("UPDATE rack SET marker_id = ? WHERE id = ?", (payload.marker_id, rack_id))
+    db.commit()
+    log.info("荷台のマーカーIDを変更しました 荷台=%s マーカー=%s", rack_id, payload.marker_id)
+    return _rack_out(db, rack_id)
+
+
+@app.put("/api/rack/placement", response_model=list[RackOut])
+def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)):
+    """
+    荷台配置初期設定画面からの一括反映。
+    「どの番地にどの荷台があるか」を画面の内容そのままにする。
+    """
+    items = payload.items
+    if len({i.rack_id for i in items}) != len(items):
+        raise HTTPException(status_code=400, detail="同じ荷台が2回指定されています。")
+    if len({i.street_address_id for i in items}) != len(items):
+        raise HTTPException(status_code=400, detail="同じ番地に2台の荷台は置けません。")
+
+    for item in items:
+        rack = db.execute(
+            "SELECT id, marker_id FROM rack WHERE id = ? AND is_deleted = 0", (item.rack_id,)
+        ).fetchone()
+        if rack is None:
+            raise HTTPException(status_code=400, detail=f"荷台 id={item.rack_id} が見つかりません")
+        if _in_transit(db, item.rack_id):
+            raise HTTPException(
+                status_code=409,
+                detail=f"荷台{rack['marker_id']}は搬送中です。終わってから設定してください。",
+            )
+        exists = db.execute(
+            "SELECT id FROM street_address WHERE id = ? AND is_deleted = 0",
+            (item.street_address_id,),
+        ).fetchone()
+        if exists is None:
+            raise HTTPException(
+                status_code=400, detail=f"番地 id={item.street_address_id} が見つかりません"
+            )
+
+    try:
+        # いったん全部どかしてから置き直す。入れ替えでも途中で衝突しない
+        for item in items:
+            db.execute("UPDATE rack SET street_address_id = NULL WHERE id = ?", (item.rack_id,))
+        for item in items:
+            db.execute(
+                "UPDATE rack SET street_address_id = ? WHERE id = ?",
+                (item.street_address_id, item.rack_id),
+            )
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        # 画面に出ていない荷台がその番地にいる場合(画面が古い)
+        raise HTTPException(
+            status_code=409,
+            detail="指定した番地に別の荷台があります。画面を更新してからやり直してください。",
+        )
+
+    log.info("荷台配置を更新しました 件数=%s", len(items))
+    rows = db.execute(RACK_LIST_SQL).fetchall()
+    return [{**dict(r), "label": f"荷台{r['marker_id']}"} for r in rows]
