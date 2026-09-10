@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1290" height="1770" viewBox="0 0 1290 1770" font-family="'Droid Sans Fallback','Noto Sans CJK JP','Yu Gothic',sans-serif">
+  <!-- 背景(高コントラスト白地) -->
+  <rect x="0" y="0" width="1290" height="1770" fill="#ffffff"/>
+  <rect x="40" y="40" width="1210" height="1690" fill="none" stroke="#000000" stroke-width="5"/>
+
+  <!-- ヘッダ:実在の運送会社ではない汎用見本表記 -->
+  <rect x="40" y="40" width="1210" height="150" fill="#000000"/>
+  <text x="78" y="140" fill="#ffffff" font-size="62">宅配便伝票(見本)</text>
+  <text x="1010" y="100" fill="#ffffff" font-size="34">SAMPLE</text>
+  <text x="978" y="152" fill="#ffffff" font-size="26">デモ用・非実在</text>
+
+  <!-- お届け先 -->
+  <text x="78" y="298" fill="#000000" font-size="40">お届け先</text>
+  <line x1="78" y1="322" x2="1212" y2="322" stroke="#000000" stroke-width="3"/>
+  <text x="92" y="448" fill="#000000" font-size="78">三井 太郎 様</text>
+  <text x="92" y="510" fill="#000000" font-size="30">東京都中央区日本橋 1-2-3 現場事務所</text>
+
+  <!-- ご依頼主 -->
+  <text x="78" y="616" fill="#000000" font-size="40">ご依頼主</text>
+  <line x1="78" y1="640" x2="1212" y2="640" stroke="#000000" stroke-width="3"/>
+  <text x="92" y="724" fill="#000000" font-size="48">株式会社 資材センター</text>
+
+  <!-- 品名 -->
+  <text x="78" y="832" fill="#000000" font-size="40">品名</text>
+  <line x1="78" y1="856" x2="1212" y2="856" stroke="#000000" stroke-width="3"/>
+  <text x="92" y="968" fill="#000000" font-size="70">手袋 #1166</text>
+  <text x="92" y="1028" fill="#000000" font-size="30">数量 1 個 / 重量 0.4 kg</text>
+
+  <!-- 送り状番号(独立行・大きめ・字間広め・バーコードから離す) -->
+  <text x="78" y="1146" fill="#000000" font-size="40">送り状番号</text>
+  <line x1="78" y1="1170" x2="1212" y2="1170" stroke="#000000" stroke-width="3"/>
+  <text x="150" y="1300" fill="#000000" font-size="86" letter-spacing="12">4888-1091-8164</text>
+
+  <!-- 区切り(番号とバーコードを明確に分離) -->
+  <line x1="78" y1="1418" x2="1212" y2="1418" stroke="#000000" stroke-width="2"/>
+
+  <!-- 擬似バーコード(装飾・番号から約120px離す) -->
+  <g fill="#000000">
+    <rect x="92" y="1452" width="8" height="86"/>
+    <rect x="108" y="1452" width="4" height="86"/>
+    <rect x="120" y="1452" width="12" height="86"/>
+    <rect x="140" y="1452" width="4" height="86"/>
+    <rect x="152" y="1452" width="8" height="86"/>
+    <rect x="168" y="1452" width="16" height="86"/>
+    <rect x="192" y="1452" width="4" height="86"/>
+    <rect x="204" y="1452" width="8" height="86"/>
+    <rect x="220" y="1452" width="12" height="86"/>
+    <rect x="240" y="1452" width="4" height="86"/>
+    <rect x="252" y="1452" width="8" height="86"/>
+    <rect x="268" y="1452" width="16" height="86"/>
+    <rect x="292" y="1452" width="4" height="86"/>
+    <rect x="304" y="1452" width="12" height="86"/>
+    <rect x="324" y="1452" width="8" height="86"/>
+    <rect x="340" y="1452" width="4" height="86"/>
+    <rect x="352" y="1452" width="16" height="86"/>
+    <rect x="376" y="1452" width="8" height="86"/>
+    <rect x="392" y="1452" width="4" height="86"/>
+    <rect x="404" y="1452" width="12" height="86"/>
+  </g>
+
+  <!-- フッタ注記 -->
+  <line x1="78" y1="1600" x2="1212" y2="1600" stroke="#000000" stroke-width="2"/>
+  <text x="78" y="1652" fill="#000000" font-size="28">お問い合わせは配達店までご連絡ください(見本のため無効)</text>
+  <text x="78" y="1700" fill="#000000" font-size="26">受付日 2026年07月20日 / 担当 —</text>
+</svg>

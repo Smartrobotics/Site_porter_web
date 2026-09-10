@@ -1,0 +1,8 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="サイトポーター シンボル">
+  <!-- Three nested motion arcs suggesting forward delivery -->
+  <path d="M20 92 A44 44 0 0 1 92 20" stroke="#F39800" stroke-width="11" stroke-linecap="round"/>
+  <path d="M34 96 A34 34 0 0 1 96 34" stroke="#0068B7" stroke-width="11" stroke-linecap="round"/>
+  <path d="M48 100 A24 24 0 0 1 100 48" stroke="#00A051" stroke-width="11" stroke-linecap="round"/>
+  <!-- Payload dot -->
+  <circle cx="60" cy="60" r="8.5" fill="#1B2D4F"/>
+</svg>
