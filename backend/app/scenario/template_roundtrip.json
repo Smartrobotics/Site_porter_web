@@ -1,0 +1,328 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "set_mode",
+            "mode": 2
+        },
+        {
+            "action": "set_map",
+            "map_no": 14
+        },
+        {
+            "action": "set_robot_position",
+            "x": -3.678,
+            "y": -6.48,
+            "z": 0.0,
+            "roll": 0.0,
+            "pitch": 0.0,
+            "yaw": 359.8,
+            "localize_timeout": 10,
+            "localize_retry": 2
+        },
+        {
+            "action": "set_foot_print",
+            "number": 0,
+            "timeout": 600
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": "{{pickup_path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "precise_positioning",
+            "marker_id": "{{pickup_marker}}",
+            "timeout": 600
+        },
+        {
+            "action": "proceed_narrow",
+            "distance": 0.9055,
+            "timeout": 600
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.05
+        },
+        {
+            "action": "set_foot_print",
+            "number": 1,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": 3
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "elv_call_floor",
+            "start_floor": 2,
+            "goal_floor": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": 2
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": 0.2,
+            "elv_back_offset": 0.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_enter",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": 3.6,
+            "elv_back_offset": 0.0,
+            "goal_freeze_distance": 1.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_exit",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_map",
+            "map_no": 13
+        },
+        {
+            "action": "set_robot_position",
+            "x": 0.58,
+            "y": -0.014,
+            "z": 0.0,
+            "roll": 0.0,
+            "pitch": 0.0,
+            "yaw": 359.8,
+            "localize_timeout": 10,
+            "localize_retry": 2
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 13,
+            "path_no": "{{dropoff_path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 0
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.0,
+            "led": "TASK_FINISH"
+        },
+        {
+            "action": "set_foot_print",
+            "number": 0,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 13,
+            "path_no": "{{return_pickup_path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "precise_positioning",
+            "marker_id": "{{return_marker}}",
+            "timeout": 600
+        },
+        {
+            "action": "proceed_narrow",
+            "distance": 0.9055,
+            "timeout": 600
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.05
+        },
+        {
+            "action": "set_foot_print",
+            "number": 1,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 13,
+            "path_no": 2
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "elv_call_floor",
+            "start_floor": 1,
+            "goal_floor": 2
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 13,
+            "path_no": 1
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": 0.2,
+            "elv_back_offset": 0.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_enter",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": 3.3,
+            "elv_back_offset": 0.0,
+            "goal_freeze_distance": 1.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_exit",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_map",
+            "map_no": 14
+        },
+        {
+            "action": "set_robot_position",
+            "x": 0.807,
+            "y": -0.094,
+            "z": 0.0,
+            "roll": 0.0,
+            "pitch": 0.0,
+            "yaw": 359.5,
+            "localize_timeout": 10,
+            "localize_retry": 2
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": 3
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": "{{return_dropoff_path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 0
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.0,
+            "led": "TASK_FINISH"
+        },
+        {
+            "action": "set_foot_print",
+            "number": 0,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        },
+        {
+            "action": "set_route_no",
+            "map_no": 14,
+            "path_no": 4
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        }
+    ]
+}

@@ -1,0 +1,40 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "set_mode",
+            "mode": 2
+        },
+        {
+            "action": "set_map",
+            "map_no": "{{map_no}}"
+        },
+        {
+            "action": "set_robot_position",
+            "x": "{{home_x}}",
+            "y": "{{home_y}}",
+            "z": 0.0,
+            "roll": 0.0,
+            "pitch": 0.0,
+            "yaw": "{{home_yaw}}",
+            "localize_timeout": 10,
+            "localize_retry": 2
+        },
+        {
+            "action": "set_foot_print",
+            "number": 0,
+            "timeout": 600
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.0
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 0
+        }
+    ]
+}

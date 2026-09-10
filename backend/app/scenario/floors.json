@@ -1,0 +1,39 @@
+{
+    "_comment": "Константы объекта, которые генератор действительно читает: home / home_path_no / elv_pose_path_no / elv_wait_pose_path_no и elevator. map_no сюда НЕ входит — он берётся из базы (area.map_no), потому что его показывает интерфейс и он меняется вместе с объектом. При переезде на другой объект замерять заново: подставленные наугад значения уводят робота не туда.",
+    "floors": {
+        "2": {
+            "map_no": 19,
+            "home": {
+                "x": 1.105,
+                "y": 5.201,
+                "yaw": 181.6
+            },
+            "home_path_no": 6,
+            "elv_wait_pose_path_no": 2,
+            "elv_pose_path_no": 1
+        },
+        "1": {
+            "map_no": 18,
+            "elv_wait_pose_path_no": 2,
+            "elv_pose_path_no": 1
+        }
+    },
+    "elevator": {
+        "2->1": {
+            "exit_offset": 3.6,
+            "init_pose": {
+                "x": -0.523,
+                "y": -0.131,
+                "yaw": 0.4
+            }
+        },
+        "1->2": {
+            "exit_offset": 3.6,
+            "init_pose": {
+                "x": -0.523,
+                "y": -0.131,
+                "yaw": 0.4
+            }
+        }
+    }
+}

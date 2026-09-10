@@ -1,0 +1,15 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "set_route_no",
+            "map_no": "{{map_no}}",
+            "path_no": "{{path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        }
+    ]
+}

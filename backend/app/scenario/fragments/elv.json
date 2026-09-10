@@ -1,0 +1,72 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "elv_call_floor",
+            "start_floor": "{{start_floor}}",
+            "goal_floor": "{{goal_floor}}"
+        },
+        {
+            "action": "set_route_no",
+            "map_no": "{{elv_pose_map_no}}",
+            "path_no": "{{elv_pose_path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": 0.2,
+            "elv_back_offset": 0.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_enter",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_goal_elv",
+            "timeout": 600,
+            "elv_front_offset": "{{exit_offset}}",
+            "elv_back_offset": 0.0,
+            "goal_freeze_distance": 1.0
+        },
+        {
+            "action": "start_elv_goal_controller",
+            "timeout": 600
+        },
+        {
+            "action": "elv_boarding_check_exit",
+            "timeout": 600
+        },
+        {
+            "action": "elv_get_on_off_flag",
+            "timeout": 600
+        },
+        {
+            "action": "set_map",
+            "map_no": "{{goal_map_no}}"
+        },
+        {
+            "action": "set_robot_position",
+            "x": "{{init_pose_x}}",
+            "y": "{{init_pose_y}}",
+            "z": 0.0,
+            "roll": 0.0,
+            "pitch": 0.0,
+            "yaw": "{{init_pose_yaw}}",
+            "localize_timeout": 10,
+            "localize_retry": 2
+        }
+    ]
+}

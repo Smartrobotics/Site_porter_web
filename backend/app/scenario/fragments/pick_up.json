@@ -1,0 +1,40 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "set_route_no",
+            "map_no": "{{map_no}}",
+            "path_no": "{{path_no}}"
+        },
+        {
+            "action": "start_navigation",
+            "loop": false
+        },
+        {
+            "action": "precise_positioning",
+            "marker_id": "{{marker_id}}",
+            "timeout": 600
+        },
+        {
+            "action": "proceed_narrow",
+            "distance": 0.9055,
+            "timeout": 600
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.05
+        },
+        {
+            "action": "set_foot_print",
+            "number": 1,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        }
+    ]
+}

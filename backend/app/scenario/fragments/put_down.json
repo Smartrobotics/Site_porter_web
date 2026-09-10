@@ -1,0 +1,26 @@
+{
+    "version": 1,
+    "name": "{{scenario_name}}",
+    "steps": [
+        {
+            "action": "move_forward_time",
+            "forward": 0
+        },
+        {
+            "action": "lift_control",
+            "mode": 1,
+            "speed": 0.03,
+            "position": 0.0,
+            "led": "TASK_FINISH"
+        },
+        {
+            "action": "set_foot_print",
+            "number": 0,
+            "timeout": 600
+        },
+        {
+            "action": "move_forward_time",
+            "forward": 1
+        }
+    ]
+}
