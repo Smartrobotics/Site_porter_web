@@ -1,0 +1,14 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.db
+data/*.db
+*.sql.bak
+
+# TLS証明書（マシンごとに mkcert で作る。絶対にコミットしない）
+certs/
+
+# 配布用に置くローカルCA（マシンごとに mkcert で用意する）
+ca/*.pem
+ca/*.crt

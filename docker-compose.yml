@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: siteporter-backend
+    restart: unless-stopped          # サーバー再起動時に自動で復帰する
+    environment:
+      DB_PATH: /data/app.db
+      CA_DIR: /ca
+      LOG_LEVEL: INFO                # 詳しく見たいときは DEBUG
+      # ★要変更: スマホや他PCから使うなら、そのURLを追加する（カンマ区切り）
+      #   Vite の proxy 経由なら実は不要だが、直接 8000 番を叩く場合に効く
+      CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173"
+    volumes:
+      - ./backend:/app               # ホットリロード用
+      - ./data:/data                 # DBの実体は ./data/app.db（down -v でも消えない）
+      - ./ca:/ca:ro                  # mkcert のルート証明書（/setup で配布）
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    logging:                         # 放置するとログが無制限に肥大する
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build: ./frontend
+    container_name: siteporter-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules            # コンテナ側の node_modules を保護
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
