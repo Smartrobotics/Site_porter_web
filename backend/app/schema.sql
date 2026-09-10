@@ -98,8 +98,10 @@ CREATE TABLE IF NOT EXISTS request (
     confirmed_at  TEXT,                          -- delivery だけ
     cancelled_at  TEXT,                          -- 取消した時刻
     CHECK (
+        -- delivery は伝票の3項目を「持てる」。必須にはしない。
+        -- 搬送依頼入力画面では荷物名・受取人・送り状番号のいずれも手入力で省略でき、
+        -- 伝票QRを読まない依頼(手渡しの資材など)もそのまま受け付ける。
         (kind = 'delivery'
-         AND tracking_no IS NOT NULL AND item IS NOT NULL AND receiver_name IS NOT NULL
          AND status IN ('queued','running','delivered','confirmed','failed','cancelled'))
         OR
         (kind = 'collect'

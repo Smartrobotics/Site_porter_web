@@ -1,4 +1,17 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+class RequestCreate(BaseModel):
+    """搬送依頼の受付。番地を決めるのはサーバーなので、送るのはエリアまで。"""
+    rack_id: int
+    from_area_id: int
+    to_area_id: int
+    item: str | None = Field(default=None, max_length=200)
+    receiver_name: str | None = Field(default=None, max_length=100)
+    tracking_no: str | None = Field(default=None, max_length=100)
+    priority: int = Field(default=2, ge=1, le=3)
+
 
 class RequestOut(BaseModel):
     """搬送依頼一覧の1行。エリア名と荷台マーカーは JOIN 済みの値。"""
@@ -14,6 +27,20 @@ class RequestOut(BaseModel):
     from_area: str            # area.label
     to_area: str
     rack_marker_id: int
+    # 画面が場所をたどるための生のID
+    rack_id: int
+    from_area_id: int
+    to_area_id: int
+    from_address_id: int | None
+    to_address_id: int | None
+    # 時刻。未到達なら None
+    started_at: str | None
+    delivered_at: str | None
+    confirmed_at: str | None
+    # 走行中の依頼だけ入る。ロボットの現在位置(モックでも実機でも同じ形)
+    robot_phase: str | None
+    step_index: int | None
+    step_total: int | None
 
 
 class AreaOut(BaseModel):
@@ -50,3 +77,13 @@ class UserOut(BaseModel):
     """受取人。name は伝票QRの receiver と一致していること。"""
     id: int
     name: str
+
+
+class CancelIn(BaseModel):
+    """
+    依頼の取消。
+      abort  … 走行を中止する(失敗として残す)
+      reset  … 搬送開始前の状態に戻す。依頼はそのまま残り、また順番待ちになる
+      delete … 画面から消す。記録は is_deleted で残す
+    """
+    mode: Literal["abort", "reset", "delete"]

@@ -110,8 +110,9 @@ export function Settings() {
       <div className="card card-pad" style={{ marginBottom: 18 }}>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
           E6 / E8 は受け付けを断り、エラーモーダルを出します。[ 閉じる ] で内容確認画面に戻り、そのまま送信し直せます。
-          E7 はモーダルを出さず、受け付けて順番待ちにします(空き場所ができたら走ります)。
-          E9(ロボットが実行中)は設定なしで再現できます — 搬送中にもう1件依頼すれば順番待ちになります。
+          E7(搬送先に空き場所がない)と E9(ロボットが実行中)は設定なしで再現できます。
+          E7 は番地を全部埋めれば起き、E9 は搬送中にもう1件依頼すれば起きます。
+          どちらもモーダルは出さず、受け付けて順番待ちになります。
         </p>
         <div className="segmented">
           {(
@@ -119,7 +120,6 @@ export function Settings() {
               { v: 'none', label: 'なし', hint: '通常' },
               { v: 'e6', label: 'E6', hint: 'サーバー接続不可' },
               { v: 'e8', label: 'E8', hint: '荷台が使用中' },
-              { v: 'e7', label: 'E7', hint: '空き場所なし' },
             ] as const
           ).map((o) => (
             <button
@@ -134,9 +134,7 @@ export function Settings() {
         </div>
         {demoError !== 'none' && (
           <p className="muted" style={{ fontSize: 12, marginTop: 10, color: 'var(--orange-dark)' }}>
-            {demoError === 'e7'
-              ? '現在、依頼は受け付けますが走らせません(順番待ちのまま)。デモが終わったら「なし」に戻してください。'
-              : '現在、搬送依頼の送信は必ず失敗します。デモが終わったら「なし」に戻してください。'}
+            現在、搬送依頼の送信は必ず失敗します。デモが終わったら「なし」に戻してください。
           </p>
         )}
       </div>
