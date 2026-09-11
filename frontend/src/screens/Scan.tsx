@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import jsQR from 'jsqr'
+import { createArucoDetector, createStableVote } from '../lib/aruco'
 import { useStore } from '../domain/store'
 import { IconCart, IconScan } from '../components/icons'
 
 type CamState = 'starting' | 'live' | 'denied' | 'unavailable'
 
+// 解析に使うフレームの幅。カメラは 1280 以上で来るが、マーカー検出は
+// 1フレームごとに全画素を二値化・輪郭抽出するので、そのままではスマホで
+// 数 fps に落ちる。640 でも 2〜3m 先の 4cm マーカーが読める大きさは残る
+const FRAME_WIDTH = 640
+
 /**
  * 荷台マーカーの読み取り画面。
+ * 荷台には ArUco マーカー (ARUCO_MIP_36h12、ロボットと同じ辞書) が貼ってある。
+ * QR も併せて読む: デモ用の印刷物や、マーカーの脇に QR を添える運用のため。
  * 搬送依頼入力画面から来て、読み取れたらそのまま入力画面へ戻す。
  * 確認画面は挟まない(読み取り後は自動で戻り、マーカーID欄に値が入る)。
  * 読み取れなければキャンセルで戻り、入力画面で手入力する。
@@ -40,11 +48,16 @@ export function Scan() {
   const resolveMarker = (markerId: string) => {
     const id = markerId.trim()
     if (!id) return
-    // 登録済みの荷台なら、その荷台を選んだことにする
+    // 登録済みの荷台なら、その荷台を選んだことにする。
+    // FormState の markerId は入力欄の値なので文字列で渡す。数値を渡すと
+    // 入力画面の markerId.trim() が落ちて画面が真っ白になる
     const rack = racks.find((r) => String(r.markerId) === id)
     stopCamera()
     if (rack && form) {
-      navigate('/request', { replace: true, state: { form: { ...form, cartId: rack.id, markerId: rack.markerId } } })
+      navigate('/request', {
+        replace: true,
+        state: { form: { ...form, rackId: rack.id, markerId: String(rack.markerId) } },
+      })
       return
     }
     back(id)
@@ -60,6 +73,8 @@ export function Scan() {
 
   useEffect(() => {
     let cancelled = false
+    const aruco = createArucoDetector()
+    const vote = createStableVote()
 
     const scanLoop = () => {
       const video = videoRef.current
@@ -67,10 +82,20 @@ export function Scan() {
       if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (ctx) {
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
+          const scale = Math.min(1, FRAME_WIDTH / video.videoWidth)
+          canvas.width = Math.round(video.videoWidth * scale)
+          canvas.height = Math.round(video.videoHeight * scale)
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+          // ArUco: 同じ ID が続けて見えたときだけ確定する
+          const markers = aruco.detect(img)
+          const stable = vote.push(markers.length ? markers[0].id : null)
+          if (stable !== null) {
+            resolveMarker(String(stable))
+            return
+          }
+
           const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
           if (code && code.data) {
             resolveMarker(code.data)
@@ -119,7 +144,7 @@ export function Scan() {
     <div className="fade-in">
       <div className="page-head">
         <h1>マーカースキャン</h1>
-        <p>荷台のQRマーカーをカメラにかざしてください</p>
+        <p>荷台のマーカーをカメラにかざしてください</p>
       </div>
 
       {cam === 'live' || cam === 'starting' ? (
@@ -133,7 +158,7 @@ export function Scan() {
             <div className="scan-line" />
           </div>
           <div className="scan-hint">
-            {cam === 'starting' ? 'カメラを起動しています…' : 'QRマーカーを枠内に合わせてください'}
+            {cam === 'starting' ? 'カメラを起動しています…' : 'マーカーを枠内に合わせてください'}
           </div>
         </div>
       ) : (
