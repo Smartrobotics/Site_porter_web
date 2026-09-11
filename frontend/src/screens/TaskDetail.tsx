@@ -15,7 +15,7 @@ export function TaskDetail() {
   useScreenData()
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tasks, cancelTask, master } = useStore()
+  const { tasks, master } = useStore()
 
   const task = tasks.find((t) => t.id === Number(id))
 
@@ -223,16 +223,11 @@ export function TaskDetail() {
         )}
       </div>
 
-      {isActive && (
-        <button className="btn btn-danger" style={{ marginTop: 16 }} onClick={() => cancelTask(task.id)}>
-          搬送を中止する
-        </button>
-      )}
-      {!isActive && (
-        <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={() => navigate('/')}>
-          ホームへ戻る
-        </button>
-      )}
+      {/* 「搬送を中止する」はここに置かない。配送員が押すものと誤解されるため、
+          取消は管理者用の依頼一覧(設定 → 依頼取消)だけで行う */}
+      <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={() => navigate('/')}>
+        ホームへ戻る
+      </button>
     </div>
   )
 }
