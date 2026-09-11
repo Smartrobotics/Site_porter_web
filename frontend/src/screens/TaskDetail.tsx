@@ -7,8 +7,7 @@ import { PollingStamp } from '../components/PollingStamp'
 import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
 import { timelineSteps, phaseIndex } from '../domain/phase'
-import { IconChevron, IconCheck, IconAlert, IconArrow } from '../components/icons'
-import { stateLabel } from '../domain/atmobiState'
+import { IconCheck, IconAlert, IconArrow } from '../components/icons'
 import { formatTime } from '../lib/format'
 import { useSmoothProgress } from '../lib/useSmoothProgress'
 
@@ -17,7 +16,6 @@ export function TaskDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { tasks, cancelTask, master } = useStore()
-  const [rawOpen, setRawOpen] = useState(false)
 
   const task = tasks.find((t) => t.id === Number(id))
 
@@ -204,42 +202,6 @@ export function TaskDetail() {
             <PriorityBadge priority={task.priority} />
           </span>
         </div>
-        <div className="kv">
-          <span className="k">連携</span>
-          <span className="v">{task.robotAdapterName}</span>
-        </div>
-      </div>
-
-      {/* ロボット制御状態(内部識別子は非表示) */}
-      <div className="card" style={{ marginTop: 12 }}>
-        <button className="raw-toggle" onClick={() => setRawOpen((v) => !v)}>
-          <span>ロボット制御状態(詳細)</span>
-          <IconChevron
-            size={18}
-            className=""
-          />
-        </button>
-        {rawOpen && (
-          <div className="raw-body">
-            <div className="kv">
-              <span className="k">rawState</span>
-              <span className="v mono">
-                {task.rawState ?? '—'}
-                {task.rawState !== undefined ? ` (${stateLabel(task.rawState)})` : ''}
-              </span>
-            </div>
-            <div className="kv">
-              <span className="k">robotTaskId</span>
-              <span className="v mono">{task.robotTaskId ?? '—'}</span>
-            </div>
-            <div className="kv">
-              <span className="k">message</span>
-              <span className="v" style={{ textAlign: 'right', maxWidth: '65%' }}>
-                {task.statusMessage}
-              </span>
-            </div>
-          </div>
-        )}
       </div>
 
       {isActive && (
