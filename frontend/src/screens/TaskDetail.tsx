@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
-import { addressLabel, areaLabel } from '../domain/master'
+import { addressLabel, areaLabel, findRack } from '../domain/master'
 import { PollingStamp } from '../components/PollingStamp'
 import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
@@ -43,6 +43,12 @@ export function TaskDetail() {
   }
   const fromLabel = areaLabel(master, task.fromAreaId)
   const toLabel = areaLabel(master, task.toAreaId)
+  // 回収(system が作る依頼)には荷物が無い。「」ではなく、どの空荷台を戻すかを出す
+  const isCollect = task.kind === 'collect'
+  const rack = findRack(master, task.rackId)
+  const itemLabel = isCollect
+    ? `空荷台（${rack?.label ?? `マーカーID: ${task.markerId ?? '-'}`}）`
+    : task.itemName
   const currentIdx = phaseIndex(task.phase)
   const isCompleted = task.phase === 'completed'
   const isError = task.phase === 'error'
@@ -56,7 +62,7 @@ export function TaskDetail() {
           <PhaseBadge phase={task.phase} />
         </div>
         <p>
-          {fromLabel} → {toLabel}・{task.itemName}
+          {fromLabel} → {toLabel}・{itemLabel}
         </p>
         {/* 最初から完了していた場合はポーリングしないので、取得時刻も出さない */}
         {!completedOnOpen && <PollingStamp style={{ marginTop: 6 }} />}
@@ -104,11 +110,13 @@ export function TaskDetail() {
           <div className="c-ring">
             <IconCheck size={34} />
           </div>
-          <h3>搬送完了</h3>
+          <h3>{isCollect ? '回収完了' : '搬送完了'}</h3>
           <p>
-            {task.recipient && task.recipient !== '未指定'
-              ? `「${task.itemName}」を ${task.recipient} 宛にお届けしました`
-              : `「${task.itemName}」をお届けしました`}
+            {isCollect
+              ? `${itemLabel}を ${toLabel} に戻しました`
+              : task.recipient && task.recipient !== '未指定'
+                ? `「${task.itemName}」を ${task.recipient} 宛にお届けしました`
+                : `「${task.itemName}」をお届けしました`}
             {task.completedAt ? `(${formatTime(task.completedAt)})` : ''}
           </p>
         </div>
@@ -189,8 +197,8 @@ export function TaskDetail() {
           </span>
         </div>
         <div className="kv">
-          <span className="k">荷物</span>
-          <span className="v">{task.itemName}</span>
+          <span className="k">{isCollect ? '荷台' : '荷物'}</span>
+          <span className="v">{itemLabel}</span>
         </div>
         <div className="kv">
           <span className="k">受取人</span>
