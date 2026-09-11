@@ -54,8 +54,9 @@ export function Request() {
 
   const [fromAreaId, setFromAreaId] = useState(initialFrom)
   const [toAreaId, setToAreaId] = useState(initialTo)
-  // 最初はどれでもよいので先頭の荷台。カメラで読んだらそのマーカーが入る
-  const initialRack = racks.find((r) => r.id === (back?.rackId ?? state.rackId)) ?? racks[0]
+  // 荷台は最初は空。配送員が目の前の荷台をカメラで読む(か手入力する)まで
+  // 決めない。先頭の荷台を既定にすると、別の荷台を読み忘れたまま送信できてしまう
+  const initialRack = racks.find((r) => r.id === (back?.rackId ?? state.rackId))
   const [markerId, setMarkerId] = useState(back?.markerId ?? String(initialRack?.markerId ?? ''))
   const [trackingNo, setTrackingNo] = useState(back?.trackingNo ?? '')
   const [itemName, setItemName] = useState(back?.itemName ?? '')
