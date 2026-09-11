@@ -32,11 +32,10 @@ export function RequestSent() {
   }
 
   const task = tasks.find((t) => t.id === Number(state.taskId))
-  // 受付だけして走らせていない場合、自分より前に並んでいる件数から順番を出す
-  const queuePosition =
-    task && task.phase === 'queued'
-      ? tasks.filter((t) => t.phase === 'queued' && t.createdAt < task.createdAt).length + 1
-      : undefined
+  // 受付だけして走らせていない(ロボットが別の搬送中)。
+  // 「順番待ち N 番目」は出さない: 回収などシステムの依頼も並ぶので、
+  // 人が見る番号としては当てにならない
+  const queued = task?.phase === 'queued'
 
   return (
     <div className="fade-in">
@@ -57,8 +56,8 @@ export function RequestSent() {
         </div>
         <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>搬送依頼を送信しました</div>
         <div className="muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
-          {queuePosition
-            ? `受付が完了しました。順番待ち ${queuePosition} 番目です。順番になり次第、搬送を開始します。`
+          {queued
+            ? '受付が完了しました。順番になり次第、搬送を開始します。'
             : '受付が完了しました。搬送の進み具合は搬送状況画面で確認できます。'}
         </div>
       </div>
