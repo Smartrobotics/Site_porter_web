@@ -43,11 +43,12 @@ export function TaskDetail() {
   }
   const fromLabel = areaLabel(master, task.fromAreaId)
   const toLabel = areaLabel(master, task.toAreaId)
-  // 回収(system が作る依頼)には荷物が無い。「」ではなく、どの空荷台を戻すかを出す
+  // 回収(system が作る依頼)には荷物が無い。「」ではなく、どの空荷台を戻すかを
+  // マーカーIDで出す(荷台に貼ってある番号。依頼一覧の表記と同じ)
   const isCollect = task.kind === 'collect'
   const rack = findRack(master, task.rackId)
   const itemLabel = isCollect
-    ? `空荷台（${rack?.label ?? `マーカーID: ${task.markerId ?? '-'}`}）`
+    ? `空荷台（マーカーID: ${task.markerId ?? rack?.markerId ?? '-'}）`
     : task.itemName
   const currentIdx = phaseIndex(task.phase)
   const isCompleted = task.phase === 'completed'
