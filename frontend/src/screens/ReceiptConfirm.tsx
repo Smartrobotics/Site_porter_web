@@ -40,8 +40,8 @@ export function ReceiptConfirm() {
   const rows = [
     { k: '搬送完了日時', v: stamp(task.completedAt ?? task.createdAt) },
     { k: '送り状番号', v: task.trackingNo || '未入力' },
-    { k: 'エリア from', v: from },
-    { k: 'エリア To', v: to },
+    { k: '搬送元', v: from },
+    { k: '搬送先', v: to },
     { k: '荷台マーカーID', v: task.markerId || rack?.markerId || '-' },
     { k: '荷物名', v: task.itemName },
     { k: '受取人', v: task.recipient || '未選択' },

@@ -92,8 +92,8 @@ export function Notifications() {
 
                 <Row k="搬送完了日時" v={stamp(t.completedAt ?? t.createdAt)} />
                 <Row k="送り状番号" v={t.trackingNo || '未入力'} />
-                <Row k="エリア from" v={from} />
-                <Row k="エリア To" v={to} />
+                <Row k="搬送元" v={from} />
+                <Row k="搬送先" v={to} />
                 <Row k="荷台マーカーID" v={String(t.markerId ?? rack?.markerId ?? '-')} />
                 <Row k="荷物名" v={t.itemName} />
                 <Row k="受取人" v={t.recipient || '未選択'} />
