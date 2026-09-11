@@ -96,14 +96,14 @@ export function BuildingCrossSection({ fromLabel, toLabel, progress, phase }: Pr
         {/* ロボット(荷台は描かない) */}
         {/* progress は useSmoothProgress が毎フレーム更新するので CSS トランジションは付けない */}
         <g transform={`translate(${cx.toFixed(2)}, ${cy.toFixed(2)})`}>
-          {/* 本体 */}
-          <rect x="-4" y="-11" width="20" height="16" rx="4" fill={robotColor} />
-          <circle cx="6" cy="-14" r="2" fill={robotColor} />
-          <rect x="0" y="-7" width="12" height="5" rx="2" fill="#fff" opacity="0.9" />
-          <circle cx="1" cy="7" r="2.6" fill="#33405a" />
-          <circle cx="11" cy="7" r="2.6" fill="#33405a" />
+          {/* 本体。中心を (0,0) に置く: 軌跡の線とリフトの中央に乗るように */}
+          <rect x="-10" y="-11" width="20" height="16" rx="4" fill={robotColor} />
+          <circle cx="0" cy="-14" r="2" fill={robotColor} />
+          <rect x="-6" y="-7" width="12" height="5" rx="2" fill="#fff" opacity="0.9" />
+          <circle cx="-5" cy="7" r="2.6" fill="#33405a" />
+          <circle cx="5" cy="7" r="2.6" fill="#33405a" />
           {!done && !isError && (
-            <circle cx="6" cy="-3" r="16" fill="none" stroke={robotColor} strokeWidth="1.5" opacity="0.3">
+            <circle cx="0" cy="-3" r="16" fill="none" stroke={robotColor} strokeWidth="1.5" opacity="0.3">
               <animate attributeName="r" values="12;20;12" dur="1.8s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.4;0;0.4" dur="1.8s" repeatCount="indefinite" />
             </circle>
