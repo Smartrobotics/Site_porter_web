@@ -1,6 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { IconCheck } from '../components/icons'
-import { useStore } from '../domain/store'
 
 export interface SentState {
   taskId: string
@@ -14,7 +13,6 @@ export interface SentState {
 export function RequestSent() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { tasks } = useStore()
   const state = location.state as SentState | null
 
   if (!state) {
@@ -31,11 +29,6 @@ export function RequestSent() {
     )
   }
 
-  const task = tasks.find((t) => t.id === Number(state.taskId))
-  // 受付だけして走らせていない(ロボットが別の搬送中)。
-  // 「順番待ち N 番目」は出さない: 回収などシステムの依頼も並ぶので、
-  // 人が見る番号としては当てにならない
-  const queued = task?.phase === 'queued'
 
   return (
     <div className="fade-in">
@@ -56,9 +49,7 @@ export function RequestSent() {
         </div>
         <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>搬送依頼を送信しました</div>
         <div className="muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
-          {queued
-            ? '受付が完了しました。順番になり次第、搬送を開始します。'
-            : '受付が完了しました。搬送の進み具合は搬送状況画面で確認できます。'}
+          受付が完了しました。搬送の進み具合は搬送状況画面で確認できます。
         </div>
       </div>
 
