@@ -348,6 +348,8 @@ p {
   border-radius: 13px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap; /* 「空荷台回収」を2行に折らない */
+  flex-shrink: 0;
   letter-spacing: 0.01em;
 }
 .badge-pill .dot {
@@ -422,13 +424,21 @@ p {
   align-items: flex-start;
   gap: 10px;
 }
+.task-card .tc-top > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
 .tc-route {
   display: flex;
+  flex-wrap: wrap; /* 2つの場所名が入らないときは矢印の後ろで折る */
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--navy);
+}
+.tc-route .place {
+  white-space: nowrap;
 }
 .tc-route .arrow {
   color: var(--orange);

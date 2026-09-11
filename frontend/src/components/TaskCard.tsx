@@ -17,20 +17,24 @@ export function TaskCard({ task }: { task: TransportTask }) {
       <div className="tc-top">
         <div>
           <div className="tc-route">
-            {areaLabel(master, task.fromAreaId)}
+            {/* 場所名は途中で折らない。入らなければ「→」の後ろで次の行へ */}
+            <span className="place">{areaLabel(master, task.fromAreaId)}</span>
             <span className="arrow">
               <IconArrow size={17} />
             </span>
-            {areaLabel(master, task.toAreaId)}
+            <span className="place">{areaLabel(master, task.toAreaId)}</span>
           </div>
           <div className="tc-meta">
-            {relativeTime(task.createdAt)}・{task.recipient} 宛
+            {relativeTime(task.createdAt)}
+            {task.recipient ? `・${task.recipient} 宛` : ''}
           </div>
         </div>
         <PhaseBadge phase={task.phase} />
       </div>
 
-      <div className="tc-item">{task.itemName}</div>
+      <div className="tc-item">
+        {task.kind === 'collect' ? `空荷台（マーカーID: ${task.markerId ?? '-'}）` : task.itemName}
+      </div>
 
       {active && (
         <>
