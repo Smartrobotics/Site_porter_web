@@ -93,13 +93,9 @@ export function BuildingCrossSection({ fromLabel, toLabel, progress, phase }: Pr
           strokeLinecap="round"
         />
 
-        {/* ロボット + 荷台 */}
+        {/* ロボット(荷台は描かない) */}
         {/* progress は useSmoothProgress が毎フレーム更新するので CSS トランジションは付けない */}
         <g transform={`translate(${cx.toFixed(2)}, ${cy.toFixed(2)})`}>
-          {/* 荷台 */}
-          <rect x="-22" y="-9" width="16" height="14" rx="2" fill="#1B2D4F" opacity="0.85" />
-          <circle cx="-19" cy="7" r="2.4" fill="#5a6577" />
-          <circle cx="-9" cy="7" r="2.4" fill="#5a6577" />
           {/* 本体 */}
           <rect x="-4" y="-11" width="20" height="16" rx="4" fill={robotColor} />
           <circle cx="6" cy="-14" r="2" fill={robotColor} />
