@@ -205,6 +205,10 @@ export function TaskDetail() {
               <span className="v">{task.itemName}</span>
             </div>
             <div className="kv">
+              <span className="k">送り状番号</span>
+              <span className="v mono">{task.trackingNo || '—'}</span>
+            </div>
+            <div className="kv">
               <span className="k">受取人</span>
               <span className="v">{task.recipient}</span>
             </div>
