@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { StoreProvider } from './domain/store'
 import { Header } from './components/Header'
@@ -29,6 +29,30 @@ function ScrollToTop() {
   return null
 }
 
+/**
+ * 壁QR・受取人カードのURLは `?area_id=1` / `?user_id=1` の形
+ * (docs/siteporter-workflow.ja.md 6.1、qr/scripts/gen_qr.py)。
+ * ルーティングは HashRouter なので、`#` の前に付いたクエリは画面に届かない。
+ * ここで一度だけ読み取り、対応する画面へ送る:
+ *   ?area=1 / ?area_id=1  →  #/entry?area=1
+ *   ?user=1 / ?user_id=1  →  #/requests?user_id=1
+ * 読んだクエリはアドレスバーから消す。残すと再読み込みのたびに飛ばされる。
+ */
+function QueryEntry() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const area = q.get('area') ?? q.get('area_id')
+    const user = q.get('user') ?? q.get('user_id')
+    if (!area && !user) return
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+    if (area) navigate(`/entry?area=${encodeURIComponent(area)}`, { replace: true })
+    else if (user) navigate(`/requests?user_id=${encodeURIComponent(user)}`, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 function Layout() {
   return (
     <div className="app-shell">
@@ -36,6 +60,7 @@ function Layout() {
       <ToastHost />
       <ScreenErrorModal />
       <ScrollToTop />
+      <QueryEntry />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Home />} />

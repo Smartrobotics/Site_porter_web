@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { useScreenData } from '../lib/useScreenData'
@@ -42,7 +42,8 @@ function place(master: Master, areaId: number, addressId?: number): string {
  * 依頼一覧画面。
  * 過去1週間の依頼を表示する。ただし受取確認が済んでいない依頼は
  * 1週間以上前でも表示する(荷物の行方が分からなくなるため)。
- * ?user= が付いていれば、その受取人でフィルタした状態で開く。
+ * ?user= (受取人名) か ?user_id= (user.id、受取人カードのQR) が付いていれば、
+ * その受取人でフィルタした状態で開く。
  */
 export function Requests() {
   useScreenData()
@@ -50,6 +51,15 @@ export function Requests() {
   const { tasks, master } = useStore()
   const [params] = useSearchParams()
   const [recipient, setRecipient] = useState(params.get('user') ?? '')
+
+  // user_id は名前に引き直す。マスタ(users)が届いてからでないと引けない
+  const userId = params.get('user_id')
+  useEffect(() => {
+    if (!userId || recipient) return
+    const u = master.users.find((x) => String(x.id) === userId)
+    if (u) setRecipient(u.name)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, master.users])
 
   const recipients = useMemo(
     () => Array.from(new Set(tasks.map((t) => t.recipient).filter(Boolean))),
