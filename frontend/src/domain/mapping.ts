@@ -140,6 +140,7 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
     createdAt: toMs(r.created_at) ?? Date.now(),
     phase,
     progress: progressOf(r, phase),
+    stepTotal: r.status === 'running' && r.step_total ? r.step_total : undefined,
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

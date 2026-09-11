@@ -54,7 +54,10 @@ export interface TransportRequest {
 export interface TransportTask extends TransportRequest {
   createdAt: number
   phase: RobotTransportPhase
+  /** 断片単位の進み(0-100)。断片は6つ前後なので段になる。なめらかに見せるのは useSmoothProgress */
   progress: number
+  /** 走行の断片数。走行中だけ入る。進みの補間で「次の段まで」を知るために使う */
+  stepTotal?: number
   rawState?: number
   statusMessage: string
   robotTaskId?: string

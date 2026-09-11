@@ -94,7 +94,8 @@ export function BuildingCrossSection({ fromLabel, toLabel, progress, phase }: Pr
         />
 
         {/* ロボット + 荷台 */}
-        <g transform={`translate(${cx}, ${cy})`} style={{ transition: 'transform 0.5s ease' }}>
+        {/* progress は useSmoothProgress が毎フレーム更新するので CSS トランジションは付けない */}
+        <g transform={`translate(${cx.toFixed(2)}, ${cy.toFixed(2)})`}>
           {/* 荷台 */}
           <rect x="-22" y="-9" width="16" height="14" rx="2" fill="#1B2D4F" opacity="0.85" />
           <circle cx="-19" cy="7" r="2.4" fill="#5a6577" />

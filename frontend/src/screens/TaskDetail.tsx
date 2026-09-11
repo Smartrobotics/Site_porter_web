@@ -10,6 +10,7 @@ import { timelineSteps, phaseIndex } from '../domain/phase'
 import { IconChevron, IconCheck, IconAlert, IconArrow } from '../components/icons'
 import { stateLabel } from '../domain/atmobiState'
 import { formatTime } from '../lib/format'
+import { useSmoothProgress } from '../lib/useSmoothProgress'
 
 export function TaskDetail() {
   useScreenData()
@@ -24,6 +25,13 @@ export function TaskDetail() {
   // その場合は通知を出さず、ポーリングもしない(見るものがないため)。
   // 開いている間に完了したときだけ通知を出す。
   const [completedOnOpen] = useState(() => task?.phase === 'completed')
+  // 断片ごとに跳ぶ進みを、なめらかに見せる(フックなので早期 return より前に置く)
+  const smooth = useSmoothProgress(
+    task?.progress ?? 0,
+    task?.stepTotal,
+    !!task && task.phase !== 'completed' && task.phase !== 'error',
+  )
+  const progress = Math.round(smooth)
   if (!task) {
     return (
       <div className="empty" style={{ marginTop: 40 }}>
@@ -127,7 +135,7 @@ export function TaskDetail() {
 
       {/* 建物断面イラスト */}
       <div className="card" style={{ padding: '12px 8px 0' }}>
-        <BuildingCrossSection fromLabel={fromLabel} toLabel={toLabel} progress={task.progress} phase={task.phase} />
+        <BuildingCrossSection fromLabel={fromLabel} toLabel={toLabel} progress={smooth} phase={task.phase} />
       </div>
 
       {/* 進捗バー */}
@@ -135,9 +143,9 @@ export function TaskDetail() {
         <div className="card card-pad" style={{ marginTop: 12 }}>
           <div className="row-between" style={{ marginBottom: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{task.statusMessage}</span>
-            <span style={{ fontWeight: 800, color: 'var(--orange-dark)' }}>{task.progress}%</span>
+            <span style={{ fontWeight: 800, color: 'var(--orange-dark)' }}>{progress}%</span>
           </div>
-          <ProgressBar value={task.progress} phase={task.phase} />
+          <ProgressBar value={progress} phase={task.phase} />
         </div>
       )}
 
