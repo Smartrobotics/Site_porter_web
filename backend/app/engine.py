@@ -57,8 +57,10 @@ TERMINAL = ("SUCCESS", "FAILURE", "CANCELED")
 CANCEL_WAIT_SECONDS = int(os.getenv("CANCEL_WAIT_SECONDS", "60"))
 
 TICK_SECONDS = 1.0
-# 1断片にかける秒数。デモが見やすい速さ。実機では断片の終了を待つ
-SECONDS_PER_STEP = 3
+# mock で1断片にかける秒数。docker-compose.yml の MOCK_SECONDS_PER_STEP で変える。
+# 実機(bridge)では使わない — 断片の終了はロボットが決める。
+# 走行は6断片なので、20 なら1件およそ2分。
+SECONDS_PER_STEP = int(os.getenv("MOCK_SECONDS_PER_STEP", "20"))
 
 # 断片の並びは生成器が決める。走行ごとに長さも中身も変わる:
 #   delivery … init, pick_up, move_to_target, elv, move_to_target, put_down（6件）
