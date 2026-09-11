@@ -6,7 +6,7 @@ import { addressLabel, areaLabel } from '../domain/master'
 import { PollingStamp } from '../components/PollingStamp'
 import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
-import { TIMELINE_STEPS, phaseIndex } from '../domain/phase'
+import { timelineSteps, phaseIndex } from '../domain/phase'
 import { IconChevron, IconCheck, IconAlert, IconArrow } from '../components/icons'
 import { stateLabel } from '../domain/atmobiState'
 import { formatTime } from '../lib/format'
@@ -145,7 +145,7 @@ export function TaskDetail() {
       <div className="section-label">搬送タイムライン</div>
       <div className="card card-pad">
         <div className="timeline">
-          {TIMELINE_STEPS.map((step) => {
+          {timelineSteps(task.kind).map((step) => {
             const idx = phaseIndex(step.phase)
             const done = isCompleted || idx < currentIdx
             const active = !isCompleted && idx === currentIdx && isActive

@@ -39,15 +39,35 @@ export const PHASE_META: Record<RobotTransportPhase, PhaseMeta> = {
   cancelled: { label: '取消', badgeClass: 'badge-grey', progressClass: '' },
 }
 
-/** タイムライン用のフェーズ進行順 */
-export const TIMELINE_STEPS: { phase: RobotTransportPhase; title: string }[] = [
+export interface TimelineStep {
+  phase: RobotTransportPhase
+  title: string
+}
+
+/**
+ * タイムラインの段階。依頼の種別で変わる。
+ *
+ * 搬送(delivery)は荷降ろしで終わる。空荷台の回収は搬送の続きではなく、
+ * 荷降ろしを終えた時点でサーバーがその階の空荷台を見て別に作る依頼
+ * (kind = collect, created_by = system)。だから搬送のタイムラインには出さない。
+ */
+const DELIVERY_STEPS: TimelineStep[] = [
   { phase: 'dispatching', title: '配車' },
   { phase: 'loading', title: '積込' },
   { phase: 'transporting', title: '搬送中' },
   { phase: 'arrived', title: '到着' },
+  { phase: 'completed', title: '完了' },
+]
+
+/** 回収は走行中ずっと「空荷台回収」のひとまとめ(mapping.ts の phaseOf を参照) */
+const COLLECT_STEPS: TimelineStep[] = [
   { phase: 'returning', title: '空荷台回収' },
   { phase: 'completed', title: '完了' },
 ]
+
+export function timelineSteps(kind: 'delivery' | 'collect' | undefined): TimelineStep[] {
+  return kind === 'collect' ? COLLECT_STEPS : DELIVERY_STEPS
+}
 
 const ORDER: RobotTransportPhase[] = [
   'idle',
