@@ -63,10 +63,6 @@ export function Entry() {
         )}
       </div>
 
-      <p className="entry-lead muted">
-        アプリのインストールや事前設定は不要です。このまま搬送依頼にお進みいただけます。
-      </p>
-
       <button
         className="btn btn-primary"
         style={{ marginTop: 8 }}
