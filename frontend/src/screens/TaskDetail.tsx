@@ -63,7 +63,8 @@ export function TaskDetail() {
           <PhaseBadge phase={task.phase} />
         </div>
         <p>
-          {fromLabel} → {toLabel}・{itemLabel}
+          {fromLabel} → {toLabel}
+          {!isCollect && `・${task.itemName}`}
         </p>
         {/* 最初から完了していた場合はポーリングしないので、取得時刻も出さない */}
         {!completedOnOpen && <PollingStamp style={{ marginTop: 6 }} />}
@@ -114,7 +115,7 @@ export function TaskDetail() {
           <h3>{isCollect ? '回収完了' : '搬送完了'}</h3>
           <p>
             {isCollect
-              ? `${itemLabel}を ${toLabel} に戻しました`
+              ? `${itemLabel}を戻しました`
               : task.recipient && task.recipient !== '未指定'
                 ? `「${task.itemName}」を ${task.recipient} 宛にお届けしました`
                 : `「${task.itemName}」をお届けしました`}
