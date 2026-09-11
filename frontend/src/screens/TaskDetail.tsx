@@ -196,20 +196,25 @@ export function TaskDetail() {
             {addressLabel(master, task.fromAddressId)} / {addressLabel(master, task.toAddressId)}
           </span>
         </div>
-        <div className="kv">
-          <span className="k">{isCollect ? '荷台' : '荷物'}</span>
-          <span className="v">{itemLabel}</span>
-        </div>
-        <div className="kv">
-          <span className="k">受取人</span>
-          <span className="v">{task.recipient}</span>
-        </div>
-        <div className="kv">
-          <span className="k">緊急度</span>
-          <span className="v">
-            <PriorityBadge priority={task.priority} />
-          </span>
-        </div>
+        {/* 回収には荷物も受取人も無い。荷台は見出しに出ている */}
+        {!isCollect && (
+          <>
+            <div className="kv">
+              <span className="k">荷物</span>
+              <span className="v">{task.itemName}</span>
+            </div>
+            <div className="kv">
+              <span className="k">受取人</span>
+              <span className="v">{task.recipient}</span>
+            </div>
+            <div className="kv">
+              <span className="k">緊急度</span>
+              <span className="v">
+                <PriorityBadge priority={task.priority} />
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {isActive && (
