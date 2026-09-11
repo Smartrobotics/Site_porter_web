@@ -7,31 +7,18 @@ services:
       DB_PATH: /data/app.db
       CA_DIR: /ca
       LOG_LEVEL: INFO                # 詳しく見たいときは DEBUG
-      # ロボットの動かし方
-      #   mock   … ロボット無しで時間だけ進む(開発・デモ)
-      #   bridge … scenario_bridge.py を HTTP で呼ぶ
       ROBOT_MODE: mock
-      # ★ 待受先は動かす場所で変わる
-      #   ロボット本体では バックエンドはホストのプロセスなので http://127.0.0.1:8080
-      #   ここ(コンテナの中)では 127.0.0.1 はコンテナ自身なので host.docker.internal
-      #   つまり tools/fake_bridge.py をホストで動かして試すとき用の値
+      # mock で1断片にかける秒数。走行は6断片なので 20 で1件およそ2分
+      MOCK_SECONDS_PER_STEP: 10
       ROBOT_URL: "http://host.docker.internal:8080"
-      # 走行1件の上限時間。超えたら中断して失敗にする
       TRIP_TIMEOUT_SECONDS: 1800
-      # 中断を送ってから終了状態を待つ上限(エレベーター動作中は効かないため)
       CANCEL_WAIT_SECONDS: 60
-      # シナリオ断片の置き場。エンジンと同じディレクトリを見る。
-      # ファイルは転送しない — bind mount なので書けばすぐ見える
       SCENARIO_DIR: /scenarios
-      # ★要変更: スマホや他PCから使うなら、そのURLを追加する（カンマ区切り）
-      #   Vite の proxy 経由なら実は不要だが、直接 8000 番を叩く場合に効く
-      CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173"
+      CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173,https://192.168.214.28"
     volumes:
       - ./backend:/app               # ホットリロード用
       - ./data:/data                 # DBの実体は ./data/app.db（down -v でも消えない）
       - ./ca:/ca:ro                  # mkcert のルート証明書（/setup で配布）
-      # ロボットのシナリオ置き場。launch の scenario_dir と同じ場所。
-      # ロボット本体ではバックエンドがホストのプロセスなので、この行は不要
       - ../takuhai_container_ws/Taisei_takuhai_system/src/scenario_control/scenarios:/scenarios
     ports:
       - "8000:8000"
