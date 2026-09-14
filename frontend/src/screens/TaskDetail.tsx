@@ -214,7 +214,7 @@ export function TaskDetail() {
               <span className="v">{task.recipient}</span>
             </div>
             <div className="kv">
-              <span className="k">緊急度</span>
+              <span className="k">優先度</span>
               <span className="v">
                 <PriorityBadge priority={task.priority} />
               </span>
