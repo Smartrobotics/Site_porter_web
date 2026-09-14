@@ -117,7 +117,7 @@ export function TaskDetail() {
             {isCollect
               ? `${itemLabel}を戻しました`
               : task.recipient && task.recipient !== '未指定'
-                ? `「${task.itemName}」を ${task.recipient} 宛にお届けしました`
+                ? `「${task.itemName}」を ${task.recipient}様宛にお届けしました`
                 : `「${task.itemName}」をお届けしました`}
             {task.completedAt ? `(${formatTime(task.completedAt)})` : ''}
           </p>

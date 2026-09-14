@@ -26,7 +26,7 @@ export function TaskCard({ task }: { task: TransportTask }) {
           </div>
           <div className="tc-meta">
             {relativeTime(task.createdAt)}
-            {task.recipient ? `・${task.recipient} 宛` : ''}
+            {task.recipient ? `・${task.recipient}様宛` : ''}
           </div>
         </div>
         <PhaseBadge phase={task.phase} />

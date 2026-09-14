@@ -95,7 +95,7 @@ export function AdminRequests() {
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                   {from} → {to}
-                  {t.recipient ? `・${t.recipient} 宛` : ''}
+                  {t.recipient ? `・${t.recipient}様宛` : ''}
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                   ロボット: {assigned ? `アサイン済み(${t.robotAdapterName})` : '未アサイン'}
