@@ -7,7 +7,8 @@ services:
       DB_PATH: /data/app.db
       CA_DIR: /ca
       LOG_LEVEL: INFO                # 詳しく見たいときは DEBUG
-      ROBOT_MODE: mock
+      # ROBOT_MODE: mock
+      ROBOT_MODE: bridge
       # mock で1断片にかける秒数。走行は6断片なので 20 で1件およそ2分
       MOCK_SECONDS_PER_STEP: 10
       ROBOT_URL: "http://host.docker.internal:8080"

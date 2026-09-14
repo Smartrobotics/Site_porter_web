@@ -62,11 +62,6 @@ CREATE TABLE IF NOT EXISTS robot (
     name          TEXT NOT NULL UNIQUE,          -- '宅配ロボット'。2台目からは 1号機 / 2号機 など
     phase         TEXT NOT NULL DEFAULT 'idle'
                   CHECK (phase IN ('idle','delivery','return','homing','error')),
-    -- ロボットが HOME にいるか。1 = いる。
-    -- init 断片は set_robot_position で「お前は HOME にいる」と宣言するだけで、
-    -- HOME へ走るわけではない。実際には別の場所にいるのに init を流すと、
-    -- 誤った自己位置で走り出す。だから走行を始める前にここを必ず見る。
-    -- プロセスのメモリではなく行に置くのは、サーバーが落ちても失われないため。
     at_home       INTEGER NOT NULL DEFAULT 1 CHECK (at_home IN (0, 1)),
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
@@ -104,9 +99,6 @@ CREATE TABLE IF NOT EXISTS request (
     confirmed_at  TEXT,                          -- delivery だけ
     cancelled_at  TEXT,                          -- 取消した時刻
     CHECK (
-        -- delivery は伝票の3項目を「持てる」。必須にはしない。
-        -- 搬送依頼入力画面では荷物名・受取人・送り状番号のいずれも手入力で省略でき、
-        -- 伝票QRを読まない依頼(手渡しの資材など)もそのまま受け付ける。
         (kind = 'delivery'
          AND status IN ('queued','running','delivered','confirmed','failed','cancelled'))
         OR
@@ -164,16 +156,16 @@ WHEN NEW.updated_at = OLD.updated_at
 BEGIN UPDATE request SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
 INSERT OR IGNORE INTO area (id, floor, map_no, label) VALUES
-    (1, 2, 14, '2Fエレベータ付近'),
-    (2, 1, 13, '1Fエレベータ付近');
+    (1, 2, 19, '2Fエレベータ付近'),
+    (2, 1, 18, '1Fエレベータ付近');
 
 INSERT OR IGNORE INTO street_address (id, area_id, address_no, path_no) VALUES
-    (1, 1, 1, 1),   -- 2F 番地1
-    (2, 1, 2, 2),   -- 2F 番地2
-    (3, 1, 3, 3),   -- 2F 番地3
-    (4, 2, 1, 4),   -- 1F 番地1
-    (5, 2, 2, 5),   -- 1F 番地2
-    (6, 2, 3, 6);   -- 1F 番地3
+    (1, 1, 1, 3),   -- 2F 番地1
+    (2, 1, 2, 4),   -- 2F 番地2
+    (3, 1, 3, 5),   -- 2F 番地3
+    (4, 2, 1, 3),   -- 1F 番地1
+    (5, 2, 2, 4),   -- 1F 番地2
+    (6, 2, 3, 5);   -- 1F 番地3
 
 INSERT OR IGNORE INTO rack (id, marker_id, street_address_id, is_empty) VALUES
     (1, 3, 1, 1),   -- 荷台3 → 2F 番地1
