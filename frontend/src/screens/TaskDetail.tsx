@@ -29,7 +29,8 @@ export function TaskDetail() {
     task?.stepTotal,
     !!task && task.phase !== 'completed' && task.phase !== 'error',
   )
-  const progress = Math.round(smooth)
+  // 走行中は 99 で止める。100 は完了のときだけ
+  const progress = Math.min(task && task.phase !== 'completed' ? 99 : 100, Math.round(smooth))
   if (!task) {
     return (
       <div className="empty" style={{ marginTop: 40 }}>

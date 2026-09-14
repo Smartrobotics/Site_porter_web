@@ -106,7 +106,10 @@ function phaseOf(r: RequestRaw): RobotTransportPhase {
 function progressOf(r: RequestRaw, phase: RobotTransportPhase): number {
   if (phase === 'completed') return 100
   if (r.status !== 'running' || !r.step_total) return 0
-  return Math.round(((r.step_index ?? 0) / r.step_total) * 100)
+  // step_index は「いま走っている断片の番号」(1始まり)。終わった断片は
+  // その1つ手前まで。最後の断片を走行中に 100% と出さないため
+  const done = Math.max(0, (r.step_index ?? 0) - 1)
+  return Math.round((done / r.step_total) * 100)
 }
 
 /**
