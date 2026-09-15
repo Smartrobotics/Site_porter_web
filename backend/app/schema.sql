@@ -74,6 +74,11 @@ CREATE TABLE IF NOT EXISTS robot (
     -- 入っている間エンジンは新しい走行を始めない。設定画面の
     -- 「ロボットを HOME に置き直した」(POST /api/robot/reset_home) で消える
     stuck_reason  TEXT,
+    -- 断片の中でいま動いているアクション(ブリッジの /state の action / step_index)。
+    -- 依頼の進行は断片単位で決めるので判断には使わない。断面図がロボットの位置を
+    -- 描くためだけに置く(エレベーターの前・中・後を区別する)
+    action        TEXT,
+    action_index  INTEGER,
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
     step_total    INTEGER,

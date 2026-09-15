@@ -153,6 +153,8 @@ export function TaskDetail() {
           fragmentSeq={task.fragmentSeq}
           stepTotal={task.stepTotal}
           robotFloor={task.robotFloor}
+          action={task.action}
+          actionIndex={task.actionIndex}
         />
       </div>
 

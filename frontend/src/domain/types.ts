@@ -64,6 +64,9 @@ export interface TransportTask extends TransportRequest {
   fragmentSeq?: number
   /** ロボットがいる階。断面図で「どの区間にいるか」を決める */
   robotFloor?: number
+  /** 断片の中でいま動いているアクションと番号(0始まり)。エレベーター断片の細かい位置に使う */
+  action?: string
+  actionIndex?: number
   rawState?: number
   statusMessage: string
   robotTaskId?: string

@@ -37,6 +37,9 @@ export interface RequestRaw {
   robot_scenario: string | null
   /** ロボットがいる階(エレベーター断片の完了で更新)。走行中の依頼だけ */
   robot_floor: number | null
+  /** 断片の中でいま動いているアクションとその番号(0始まり)。断面図用 */
+  robot_action: string | null
+  robot_action_index: number | null
   step_index: number | null
   step_total: number | null
 }
@@ -149,6 +152,8 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
     fragmentKind: r.status === 'running' ? fragmentKind(r.robot_scenario) || undefined : undefined,
     fragmentSeq: r.status === 'running' ? (r.step_index ?? undefined) : undefined,
     robotFloor: r.status === 'running' ? (r.robot_floor ?? undefined) : undefined,
+    action: r.status === 'running' ? (r.robot_action ?? undefined) : undefined,
+    actionIndex: r.status === 'running' ? (r.robot_action_index ?? undefined) : undefined,
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { RobotTransportPhase } from '../domain/phase'
 import { phaseIndex } from '../domain/phase'
 
@@ -11,6 +12,9 @@ interface Props {
   fragmentSeq?: number
   stepTotal?: number
   robotFloor?: number
+  /** 断片の中でいま動いているアクションと番号(0始まり)。elv 断片の細かい位置に使う */
+  action?: string
+  actionIndex?: number
 }
 
 function levelOf(label: string): number {
@@ -19,15 +23,111 @@ function levelOf(label: string): number {
 }
 
 /**
+ * エレベーター断片(backend/app/scenario/fragments/elv.json)の中の区間。
+ * 番号はその JSON の steps の並び。名前だけでは足りない:
+ * set_goal_elv と elv_get_on_off_flag は乗るときと降りるときの2回出る。
+ *
+ *   点1 = elv_wait(呼び出し待ち)   点2 = 扉の前   点3 = リフトの中(出発階)
+ *   点4 = リフトの中(到着階)        点5 = 扉の前(到着階)   点6 = elv_wait(到着階、通らない)
+ *
+ *   0 elv_call_floor                       … 点1 で待つ
+ *   1 set_route_no / 2 start_navigation    … 点1 → 点2
+ *   3 set_goal_elv / 4 start_elv_goal_controller / 5 elv_boarding_check_enter … 点2 → 点3
+ *   6 elv_get_on_off_flag                  … 点3 → 点4(乗っている。時間で進める)
+ *   7 set_goal_elv / 8 start_elv_goal_controller / 9 elv_boarding_check_exit … 点4 → 点5
+ *   10 elv_get_on_off_flag / 11 set_map / 12 set_robot_position … 点5 で止まる
+ *
+ * 区間の中の進みはサーバーからは来ない(アクションが変わった時だけ分かる)ので、
+ * アクションが変わってからの経過時間を目安の所要時間で割って進める。
+ * 次のアクションが来る前に着いてしまわないよう 92% で止める。
+ */
+type ElvLeg = 'wait' | 'toDoor' | 'enter' | 'ride' | 'exit' | 'done'
+
+const ELV_LEG_BY_INDEX: ElvLeg[] = [
+  'wait', // 0 elv_call_floor
+  'toDoor', // 1 set_route_no
+  'toDoor', // 2 start_navigation
+  'enter', // 3 set_goal_elv
+  'enter', // 4 start_elv_goal_controller
+  'enter', // 5 elv_boarding_check_enter
+  'ride', // 6 elv_get_on_off_flag
+  'exit', // 7 set_goal_elv
+  'exit', // 8 start_elv_goal_controller
+  'exit', // 9 elv_boarding_check_exit
+  'done', // 10 elv_get_on_off_flag
+  'done', // 11 set_map
+  'done', // 12 set_robot_position
+]
+
+/** 区間ごとの目安の所要時間(秒)。実測で直す */
+const ELV_LEG_SECONDS: Record<ElvLeg, number> = {
+  wait: 0,
+  toDoor: 15,
+  enter: 25,
+  ride: 40,
+  exit: 25,
+  done: 0,
+}
+
+const LEG_CEILING = 0.92
+
+function elvLeg(action: string | undefined, actionIndex: number | undefined): ElvLeg {
+  if (actionIndex !== undefined && actionIndex >= 0 && actionIndex < ELV_LEG_BY_INDEX.length) {
+    return ELV_LEG_BY_INDEX[actionIndex]
+  }
+  // 番号が無い(古いデータ)ときは名前で最善を尽くす。2回出るものは前半扱い
+  switch (action) {
+    case 'elv_call_floor':
+      return 'wait'
+    case 'set_route_no':
+    case 'start_navigation':
+      return 'toDoor'
+    case 'set_goal_elv':
+    case 'start_elv_goal_controller':
+    case 'elv_boarding_check_enter':
+      return 'enter'
+    case 'elv_get_on_off_flag':
+      return 'ride'
+    case 'elv_boarding_check_exit':
+      return 'exit'
+    case 'set_map':
+    case 'set_robot_position':
+      return 'done'
+    default:
+      return 'wait'
+  }
+}
+
+/**
+ * アクションが変わってからの経過で 0〜LEG_CEILING を返す。
+ * 区間が変わったら 0 からやり直す。
+ */
+function useLegClock(key: string, seconds: number): number {
+  const startRef = useRef<{ key: string; at: number }>({ key, at: performance.now() })
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    if (startRef.current.key !== key) {
+      startRef.current = { key, at: performance.now() }
+      setT(0)
+    }
+    if (seconds <= 0) return
+    const id = window.setInterval(() => {
+      const elapsed = (performance.now() - startRef.current.at) / 1000
+      setT(Math.min(LEG_CEILING, elapsed / seconds))
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [key, seconds])
+  return seconds <= 0 ? 0 : t
+}
+
+/**
  * 建物断面の簡易イラスト。
  * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を描く。
  *
  * 位置は「いまどの断片を走っているか」と「ロボットがいる階」から決める。
- * 以前は進み(%)を 30/62/100 で3区間に切っていたが、断片の長さは走行ごとに
- * 違うので、まだ廊下を走っているのにリフトの中に描かれることがあった。
  *   init / pick_up      … いる階の荷台の位置
- *   move_to_target      … 搬送元の階ならリフトへ向かう、搬送先の階ならリフトから荷台へ
- *   elv                 … リフトの中を上下
+ *   move_to_target      … 搬送元の階なら荷台から点1(elv_wait)へ、搬送先の階なら点5から荷台へ
+ *   elv                 … 上の6点をアクションに従って進む
  *   put_down / return_home … 搬送先の荷台の位置
  * 断片の中の進みは、なめらかにした progress をその断片の区間に割り付けて使う。
  */
@@ -40,6 +140,8 @@ export function BuildingCrossSection({
   fragmentSeq,
   stepTotal,
   robotFloor,
+  action,
+  actionIndex,
 }: Props) {
   const fromLevel = levelOf(fromLabel)
   const toLevel = levelOf(toLabel)
@@ -50,15 +152,23 @@ export function BuildingCrossSection({
   const BOT_Y = 128
   const fromY = goingUp ? BOT_Y : TOP_Y
   const toY = goingUp ? TOP_Y : BOT_Y
-  const shaftX = 250
-  const startX = 60
+  const shaftX = 251 // リフトの中央(シャフトは x=236〜266)
+  const startX = 60 // 荷台の位置
+  const WAIT_X = 190 // 点1 / 点6: elv_wait
+  const DOOR_X = 222 // 点2 / 点5: 扉の前
 
   const p = Math.max(0, Math.min(100, progress))
 
-  // 3つの区間。t は 0〜1
-  const toShaft = (t: number) => ({ cx: startX + (shaftX - startX) * t, cy: fromY })
-  const inShaft = (t: number) => ({ cx: shaftX, cy: fromY + (toY - fromY) * t })
-  const toTarget = (t: number) => ({ cx: shaftX - (shaftX - startX) * t, cy: toY })
+  const isElv = fragmentKind === 'elv'
+  const leg = isElv ? elvLeg(action, actionIndex) : 'wait'
+  // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
+  const legKey = isElv ? `${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}` : 'none'
+  const legT = useLegClock(legKey, isElv ? ELV_LEG_SECONDS[leg] : 0)
+
+  // 直線区間。t は 0〜1
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+  const onFromFloor = (x: number) => ({ cx: x, cy: fromY })
+  const onToFloor = (x: number) => ({ cx: x, cy: toY })
 
   // 断片の中での進み。progress は断片単位で段になっているので、
   // この断片の区間 [(seq-1)/N, seq/N] に割り付ける
@@ -69,33 +179,53 @@ export function BuildingCrossSection({
   })()
 
   let pos: { cx: number; cy: number }
-  const onToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
+  const robotOnToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
   if (fragmentKind && stepTotal) {
     switch (fragmentKind) {
       case 'init':
       case 'pick_up':
-        pos = onToFloor ? toTarget(1) : toShaft(0)
+        pos = robotOnToFloor ? onToFloor(startX) : onFromFloor(startX)
         break
       case 'move_to_target':
-        pos = onToFloor ? toTarget(localT) : toShaft(localT)
+        pos = robotOnToFloor
+          ? onToFloor(lerp(DOOR_X, startX, localT)) // 点5 → 荷台
+          : onFromFloor(lerp(startX, WAIT_X, localT)) // 荷台 → 点1
         break
       case 'elv':
-        pos = inShaft(localT)
+        switch (leg) {
+          case 'wait':
+            pos = onFromFloor(WAIT_X)
+            break
+          case 'toDoor':
+            pos = onFromFloor(lerp(WAIT_X, DOOR_X, legT))
+            break
+          case 'enter':
+            pos = onFromFloor(lerp(DOOR_X, shaftX, legT))
+            break
+          case 'ride':
+            pos = { cx: shaftX, cy: lerp(fromY, toY, legT) }
+            break
+          case 'exit':
+            pos = onToFloor(lerp(shaftX, DOOR_X, legT))
+            break
+          default:
+            pos = onToFloor(DOOR_X)
+        }
         break
       case 'put_down':
       case 'return_home':
-        pos = toTarget(1)
+        pos = onToFloor(startX)
         break
       default:
-        pos = toShaft(localT)
+        pos = onFromFloor(lerp(startX, WAIT_X, localT))
     }
   } else if (p <= 30) {
     // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
-    pos = toShaft(p / 30)
+    pos = onFromFloor(lerp(startX, shaftX, p / 30))
   } else if (p <= 62) {
-    pos = inShaft((p - 30) / 32)
+    pos = { cx: shaftX, cy: lerp(fromY, toY, (p - 30) / 32) }
   } else {
-    pos = toTarget((p - 62) / 38)
+    pos = onToFloor(lerp(shaftX, startX, (p - 62) / 38))
   }
   const { cx, cy } = pos
 
@@ -105,6 +235,16 @@ export function BuildingCrossSection({
 
   const floorTop = { y: TOP_Y, label: goingUp ? toLabel : fromLabel }
   const floorBot = { y: BOT_Y, label: goingUp ? fromLabel : toLabel }
+
+  // 6点。名前は付けない
+  const waypoints = [
+    { x: WAIT_X, y: fromY },
+    { x: DOOR_X, y: fromY },
+    { x: shaftX, y: fromY },
+    { x: shaftX, y: toY },
+    { x: DOOR_X, y: toY },
+    { x: WAIT_X, y: toY },
+  ]
 
   return (
     <div className="cross-section">
@@ -145,6 +285,11 @@ export function BuildingCrossSection({
           strokeWidth="2.5"
           strokeLinecap="round"
         />
+
+        {/* エレベーター前後の通過点 */}
+        {waypoints.map((w, i) => (
+          <circle key={i} cx={w.x} cy={w.y} r="4" fill="#ffffff" stroke="#1B2D4F" strokeWidth="1.6" />
+        ))}
 
         {/* ロボット(荷台は描かない) */}
         {/* progress は useSmoothProgress が毎フレーム更新するので CSS トランジションは付けない */}

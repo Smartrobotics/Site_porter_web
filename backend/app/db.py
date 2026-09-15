@@ -35,6 +35,8 @@ _ADDED_COLUMNS = [
     ("robot", "floor", "INTEGER NOT NULL DEFAULT 2"),
     ("robot", "homing_floor", "INTEGER"),
     ("robot", "stuck_reason", "TEXT"),
+    ("robot", "action", "TEXT"),
+    ("robot", "action_index", "INTEGER"),
 ]
 
 
