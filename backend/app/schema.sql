@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS robot (
     phase         TEXT NOT NULL DEFAULT 'idle'
                   CHECK (phase IN ('idle','delivery','return','homing','error')),
     at_home       INTEGER NOT NULL DEFAULT 1 CHECK (at_home IN (0, 1)),
+    -- ロボットがいる階。エレベーター断片が SUCCESS した時点で行き先の階にする。
+    -- 最後の依頼の行き先から推測してはいけない: 途中で失敗した走行を「着いた」と
+    -- 見なし、違う階の地図で HOME へ戻ろうとして set_route_no が落ちる(2026-09-15)
+    floor         INTEGER NOT NULL DEFAULT 2,
+    -- HOME へ戻る走行を始めたときの階。戻る計画は毎 tick 作り直すので、
+    -- 途中で floor が変わっても同じ計画が出るようにここで固定する
+    homing_floor  INTEGER,
+    -- 人の手が要る理由。NULL なら不要。HOME へ戻れなかったときなどに入る。
+    -- 入っている間エンジンは新しい走行を始めない。設定画面の
+    -- 「ロボットを HOME に置き直した」(POST /api/robot/reset_home) で消える
+    stuck_reason  TEXT,
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
     step_total    INTEGER,

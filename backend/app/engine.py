@@ -23,6 +23,7 @@ from .scenario import (
     SCENARIO_DIR,
     fragment_name,
     generate_chain,
+    home_floor,
     load_floors,
     plan_collect,
     plan_deliver,
@@ -103,6 +104,39 @@ def _set_at_home(conn: sqlite3.Connection, value: int) -> None:
     conn.execute("UPDATE robot SET at_home = ? WHERE id = ?", (value, ROBOT_ID))
 
 
+def _set_floor(conn: sqlite3.Connection, floor: int) -> None:
+    conn.execute("UPDATE robot SET floor = ? WHERE id = ?", (floor, ROBOT_ID))
+
+
+def _fragment_done(conn: sqlite3.Connection, plan, index: int) -> None:
+    """断片 index(1始まり)が SUCCESS した。エレベーターなら階が変わっている"""
+    if not plan or not (0 < index <= len(plan)):
+        return
+    kind, params = plan[index - 1]
+    if kind == "elv":
+        _set_floor(conn, int(params["goal_floor"]))
+        log.info("ロボットは %s 階にいます", params["goal_floor"])
+
+
+def _stuck(conn: sqlite3.Connection, reason: str) -> None:
+    """
+    人の手が要る。エンジンは新しい走行を始めず、理由を robot.stuck_reason に残す。
+    HOME へ戻れなかったときに毎 tick 同じ断片を投げ直して永久に失敗し続けた
+    (2026-09-15)のを止めるため。解除は POST /api/robot/reset_home
+    """
+    log.error("%s。ロボットを HOME に置き直し、設定画面の「HOME に置き直した」を押してください", reason)
+    conn.execute(
+        """UPDATE robot SET phase = 'error', stuck_reason = ?, homing_floor = NULL,
+                            scenario_name = NULL, step_index = NULL, step_total = NULL
+           WHERE id = ?""",
+        (reason, ROBOT_ID),
+    )
+
+
+# stuck の警告を毎秒出さないための時刻
+_stuck_logged_at = 0.0
+
+
 def _go_idle(conn: sqlite3.Connection) -> None:
     conn.execute(
         """UPDATE robot SET phase = 'idle', scenario_name = NULL,
@@ -148,6 +182,16 @@ def _start_next(conn: sqlite3.Connection) -> None:
     # 待機中の画面に「待機中」と出ているのに実は死んでいる、を避けるため。
     # 仕様どおり GET /state が死活確認を兼ねる(§3.2)
     if ROBOT_MODE == "bridge" and _poll_bridge(conn) is None:
+        return
+
+    global _stuck_logged_at
+    stuck = conn.execute("SELECT stuck_reason FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    if stuck and stuck["stuck_reason"]:
+        # 人の手待ち。走らせない。理由は1分に1回だけ出す
+        if time.time() - _stuck_logged_at > 60:
+            _stuck_logged_at = time.time()
+            log.warning("人の手待ちのため走行を始めません: %s (順番待ち %s 件)",
+                        stuck["stuck_reason"], len(rows))
         return
 
     if not rows:
@@ -331,6 +375,7 @@ def _finish(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
     if names and names[-1].endswith("return_home"):
         # collect は return_home で終わる。ロボットは HOME に戻っている
         _set_at_home(conn, 1)
+        _set_floor(conn, home_floor(load_floors()))
     status = "delivered" if req["kind"] == "delivery" else "done"
     conn.execute(
         "UPDATE request SET status = ?, delivered_at = datetime('now') WHERE id = ?",
@@ -415,16 +460,13 @@ def _floors_from_db(conn: sqlite3.Connection) -> dict:
 
 def _robot_floor(conn: sqlite3.Connection) -> int | None:
     """
-    ロボットがいる階。最後に走った依頼の行き先から引く。
-    メモリではなく DB から出すので、サーバーが再起動しても分かる。
+    ロボットがいる階。robot.floor をそのまま返す。
+    エレベーター断片の SUCCESS で更新し(_fragment_done)、HOME に戻れば HOME の階。
+    以前は最後の依頼の行き先から推測していたが、途中で失敗した走行を
+    「着いた」と見なして違う階の地図で走り出した。
     """
-    row = conn.execute(
-        """SELECT a.floor FROM request r
-           JOIN area a ON a.id = r.to_area_id
-           WHERE r.assigned_robot_id IS NOT NULL AND r.started_at IS NOT NULL
-           ORDER BY r.started_at DESC, r.id DESC LIMIT 1"""
-    ).fetchone()
-    return row["floor"] if row else None
+    row = conn.execute("SELECT floor FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    return int(row["floor"]) if row and row["floor"] is not None else None
 
 
 def _plan_for(conn: sqlite3.Connection, req: sqlite3.Row):
@@ -472,11 +514,19 @@ def _phase_of(req: sqlite3.Row) -> str:
 # サーバーが再起動しても同じ並びが再現できる。
 
 
-def _homing_names(conn: sqlite3.Connection) -> list[str]:
-    floor = _robot_floor(conn)
+def _homing_plan(conn: sqlite3.Connection):
+    """HOME へ戻る計画。始めた階(robot.homing_floor)で固定する"""
+    row = conn.execute("SELECT homing_floor FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    floor = row["homing_floor"] if row and row["homing_floor"] is not None else _robot_floor(conn)
     if floor is None:
+        return None
+    return plan_go_home(int(floor), _floors_from_db(conn))
+
+
+def _homing_names(conn: sqlite3.Connection) -> list[str]:
+    plan = _homing_plan(conn)
+    if not plan:
         return []
-    plan = plan_go_home(floor, _floors_from_db(conn))
     return [fragment_name(HOMING_RUN_ID, seq, kind) for seq, (kind, _) in enumerate(plan, 1)]
 
 
@@ -484,9 +534,9 @@ def _start_homing(conn: sqlite3.Connection) -> bool:
     """HOME へ戻る走行を始める。始められなければ False"""
     floor = _robot_floor(conn)
     if floor is None:
-        log.error("ロボットがどの階にいるか分かりません。HOME へ戻せません")
-        conn.execute("UPDATE robot SET phase = 'error' WHERE id = ?", (ROBOT_ID,))
+        _stuck(conn, "ロボットがどの階にいるか分かりません。HOME へ戻せません")
         return False
+    conn.execute("UPDATE robot SET homing_floor = ? WHERE id = ?", (floor, ROBOT_ID))
     plan = plan_go_home(floor, _floors_from_db(conn))
     try:
         names = generate_chain(plan, run_id=HOMING_RUN_ID, scenario_dir=SCENARIO_DIR)
@@ -518,6 +568,8 @@ def _post_fragment(name: str) -> bool:
 
 def _finish_homing(conn: sqlite3.Connection) -> None:
     _set_at_home(conn, 1)
+    _set_floor(conn, home_floor(load_floors()))
+    conn.execute("UPDATE robot SET homing_floor = NULL WHERE id = ?", (ROBOT_ID,))
     _go_idle(conn)
     log.info("HOME に戻りました")
 
@@ -525,11 +577,11 @@ def _finish_homing(conn: sqlite3.Connection) -> None:
 def _advance_homing(conn: sqlite3.Connection) -> None:
     global _ticks_in_step
     robot = conn.execute("SELECT * FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    plan = _homing_plan(conn)
     names = _homing_names(conn)
     index = robot["step_index"] or 1
     if not names:
-        log.error("HOME へ戻る断片を組めませんでした。ロボットの位置を人が直してください")
-        conn.execute("UPDATE robot SET phase = 'error' WHERE id = ?", (ROBOT_ID,))
+        _stuck(conn, "HOME へ戻る断片を組めませんでした")
         return
 
     if ROBOT_MODE != "bridge":
@@ -537,6 +589,7 @@ def _advance_homing(conn: sqlite3.Connection) -> None:
         if _ticks_in_step < SECONDS_PER_STEP:
             return
         _ticks_in_step = 0
+        _fragment_done(conn, plan, index)
         if index >= len(names):
             _finish_homing(conn)
         else:
@@ -557,9 +610,9 @@ def _advance_homing(conn: sqlite3.Connection) -> None:
         if name != expected:
             return
         if status != "SUCCESS":
-            log.error("HOME へ戻れませんでした status=%s reason=%s", status, state.get("reason"))
-            conn.execute("UPDATE robot SET phase = 'error' WHERE id = ?", (ROBOT_ID,))
+            _stuck(conn, f"HOME へ戻れませんでした status={status} reason={state.get('reason')}")
             return
+        _fragment_done(conn, plan, index)
         if index >= len(names):
             _finish_homing(conn)
         elif _post_fragment(names[index]):
@@ -570,6 +623,8 @@ def _advance_mock(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
     """ロボット無し。時間が経ったら次の断片へ進んだことにする"""
     robot = conn.execute("SELECT * FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
     names = _fragment_names(conn, req)
+    if robot["step_index"]:
+        _fragment_done(conn, _plan_for(conn, req), robot["step_index"])
     index = (robot["step_index"] or 0) + 1
     if index > len(names):
         _finish(conn, req)
@@ -778,6 +833,7 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
         if name != expected:
             return
         if status == "SUCCESS":
+            _fragment_done(conn, _plan_for(conn, req), index)
             if index >= (robot["step_total"] or 0):
                 _finish(conn, req)
             else:

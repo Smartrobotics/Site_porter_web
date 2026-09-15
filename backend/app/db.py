@@ -32,6 +32,9 @@ def get_db():
 # 無ければここで ALTER TABLE する(README 10 章の作り直しをせずに済む範囲: 制約なしの追加だけ)
 _ADDED_COLUMNS = [
     ("request", "from_home", "INTEGER NOT NULL DEFAULT 0"),
+    ("robot", "floor", "INTEGER NOT NULL DEFAULT 2"),
+    ("robot", "homing_floor", "INTEGER"),
+    ("robot", "stuck_reason", "TEXT"),
 ]
 
 

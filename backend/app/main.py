@@ -10,7 +10,8 @@ from fastapi.responses import JSONResponse
 
 from .ca import router as ca_router
 from .db import DB_PATH, get_db, init_db
-from .engine import ROBOT_MODE, request_cancel, run_engine
+from .engine import ROBOT_ID, ROBOT_MODE, request_cancel, run_engine
+from .scenario import home_floor, load_floors
 from .logging_config import setup_logging
 from .schemas import (
     AddressOut,
@@ -545,7 +546,7 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     """
     row = db.execute(
         """SELECT rb.id, rb.name, rb.phase, rb.scenario_name,
-                  rb.step_index, rb.step_total,
+                  rb.step_index, rb.step_total, rb.floor, rb.stuck_reason,
                   (SELECT r.id FROM request r
                    WHERE r.assigned_robot_id = rb.id AND r.status = 'running'
                      AND r.is_deleted = 0 LIMIT 1) AS request_id
@@ -554,6 +555,30 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=404, detail="ロボットが登録されていません")
     return {**dict(row), "mode": ROBOT_MODE}
+
+
+@app.post("/api/robot/reset_home", response_model=RobotOut)
+def reset_robot_home(db: sqlite3.Connection = Depends(get_db)):
+    """
+    人がロボットを HOME に置き直した後に押す。
+    HOME へ戻れなかった(stuck_reason)、あるいは失敗の後で at_home が 0 のまま、
+    という状態をここで正す。走行中の依頼があるときは断る — 先に取消する。
+    """
+    running = db.execute(
+        "SELECT id FROM request WHERE status = 'running' AND is_deleted = 0 LIMIT 1"
+    ).fetchone()
+    if running is not None:
+        raise HTTPException(status_code=409, detail=f"走行中の依頼 {running['id']} があります。先に取消してください")
+    db.execute(
+        """UPDATE robot SET at_home = 1, floor = ?, homing_floor = NULL, phase = 'idle',
+                            scenario_name = NULL, step_index = NULL, step_total = NULL,
+                            stuck_reason = NULL
+           WHERE id = ?""",
+        (home_floor(load_floors()), ROBOT_ID),
+    )
+    db.commit()
+    log.warning("ロボットを HOME に置き直したと申告がありました")
+    return get_robot(db)
 
 
 def _home_floor() -> int | None:

@@ -39,6 +39,10 @@ export interface RobotState {
   requestId: number | null
   /** mock = ロボット無しで時間だけ進む。docker-compose.yml の ROBOT_MODE で決まる */
   mode: string
+  /** ロボットがいる階(エレベーター断片の完了で更新) */
+  floor: number | null
+  /** 人の手が要る理由。null なら不要。入っている間サーバーは新しい走行を始めない */
+  stuckReason: string | null
 }
 
 interface RobotRaw {
@@ -50,6 +54,8 @@ interface RobotRaw {
   step_total: number | null
   request_id: number | null
   mode: string
+  floor: number | null
+  stuck_reason: string | null
 }
 
 const ROBOT_PHASE_LABEL: Record<string, string> = {
@@ -172,6 +178,8 @@ interface StoreContextValue extends PersistState {
   lastFetchedAt: number
   startTransport: (req: TransportRequest) => Promise<number>
   cancelTask: (id: number) => Promise<void>
+  /** 人がロボットを HOME に置き直したと申告する。stuck を解除し at_home を立てる */
+  resetRobotHome: () => Promise<void>
   cancelRequest: (id: number, mode: 'delete' | 'reset') => Promise<void>
   /** 受取人が荷物を受け取ったことを確認する */
   confirmReceipt: (taskId: number) => void
@@ -256,6 +264,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         stepTotal: rb.step_total,
         requestId: rb.request_id,
         mode: rb.mode,
+        floor: rb.floor ?? null,
+        stuckReason: rb.stuck_reason ?? null,
       })
       setLastFetchedAt(Date.now())
     } catch {
@@ -365,6 +375,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await refresh()
   }
 
+  const resetRobotHome = async () => {
+    try {
+      const res = await fetch('/api/robot/reset_home', { method: 'POST' })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string }
+        throw new Error(body.detail ?? `HTTP ${res.status}`)
+      }
+      pushToast({ title: 'ロボットを HOME にしました', body: '', kind: 'info' })
+    } catch (e) {
+      pushToast({
+        title: 'HOME にできませんでした',
+        body: e instanceof Error ? e.message : '',
+        kind: 'error',
+      })
+    }
+    await refresh()
+  }
+
   const confirmReceipt = (taskId: number) => {
     void (async () => {
       try {
@@ -433,6 +461,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     lastFetchedAt,
     startTransport,
     cancelTask,
+    resetRobotHome,
     cancelRequest,
     confirmReceipt,
     dismissToast,

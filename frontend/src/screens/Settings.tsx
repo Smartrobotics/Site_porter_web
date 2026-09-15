@@ -23,6 +23,7 @@ export function Settings() {
     racks,
     setRackMarker,
     robot,
+    resetRobotHome,
     demoError,
     setDemoError,
     demoOffline,
@@ -198,6 +199,7 @@ export function Settings() {
                   ? `${robot.scenarioName} (${robot.stepIndex}/${robot.stepTotal})`
                   : '—',
               },
+              { k: '階', v: robot.floor !== null ? `${robot.floor}F` : '—' },
               {
                 k: '動かし方',
                 v: robot.mode === 'mock' ? 'モック(ロボット無し)' : `実機 (${robot.mode})`,
@@ -212,6 +214,30 @@ export function Settings() {
                 </span>
               </div>
             ))}
+            {robot.stuckReason && (
+              <div
+                className="card card-pad"
+                style={{ marginTop: 10, borderLeft: '4px solid #c62828', background: 'var(--grey-tint)' }}
+              >
+                <div style={{ fontWeight: 700, color: '#c62828', fontSize: 13 }}>人の手が必要です</div>
+                <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>{robot.stuckReason}</div>
+                <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+                  ロボットを HOME に置き直してから、下のボタンを押してください。押すまで次の搬送は始まりません。
+                </div>
+              </div>
+            )}
+            {/* 失敗の後は at_home が 0 のまま残る。人が HOME に置き直したら申告する */}
+            {robot.requestId === null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ marginTop: 10 }}
+                onClick={() => {
+                  if (window.confirm('ロボットは HOME に置き直してありますか？')) void resetRobotHome()
+                }}
+              >
+                ロボットを HOME に置き直した
+              </button>
+            )}
             {robot.requestId !== null && (
               <button
                 className="btn btn-ghost btn-sm"

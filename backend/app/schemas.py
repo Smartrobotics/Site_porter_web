@@ -121,3 +121,7 @@ class RobotOut(BaseModel):
     request_id: int | None
     # サーバーがどちらで動いているか。mock = ロボット無しで時間だけ進む
     mode: str
+    # ロボットがいる階(エレベーター断片の完了で更新)
+    floor: int | None = None
+    # 人の手が要る理由。None なら不要。HOME へ戻れなかったときなどに入る
+    stuck_reason: str | None = None
