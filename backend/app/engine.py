@@ -235,6 +235,11 @@ def _run(conn: sqlite3.Connection, row: sqlite3.Row, to_address_id: int) -> None
     )
     # 荷台はロボットの下に入る。どの番地にも載っていない状態
     conn.execute("UPDATE rack SET street_address_id = NULL WHERE id = ?", (row["rack_id"],))
+    # 出発時にロボットが HOME にいたかを依頼に残す。計画はこれで決まり、
+    # 毎 tick 作り直しても同じ形になる(再起動しても同じ)
+    robot = conn.execute("SELECT at_home FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    conn.execute("UPDATE request SET from_home = ? WHERE id = ?",
+                 (1 if robot["at_home"] else 0, row["id"]))
     # ロボットは HOME を離れる
     _set_at_home(conn, 0)
 
@@ -426,8 +431,10 @@ def _plan_for(conn: sqlite3.Connection, req: sqlite3.Row):
     """
     走行の断片リスト。生成器の作りに合わせて2つに割る:
       delivery … go_home=False。put_down で終わり、その先はサーバーが決める
-      collect  … from_home=False。ロボットは荷降ろしした場所にいる
-    決定的なので、サーバーが再起動しても同じ並びが出る。覚えておく必要はない。
+      collect  … 荷降ろし直後なら from_home=False(ロボットはその場にいる)。
+                 E7 で満杯を解消する回収は HOME から出るので from_home=True:
+                 init と移動が先に付く。どちらかは request.from_home が決める
+    request の列だけから決まるので、サーバーが再起動しても同じ並びが出る。
     """
     params = _trip_params(conn, req)
     if params is None:
@@ -437,7 +444,8 @@ def _plan_for(conn: sqlite3.Connection, req: sqlite3.Row):
     try:
         if req["kind"] == "delivery":
             return plan_deliver(pickup, dropoff, floors, from_home=True, go_home=False)
-        return plan_collect(pickup, dropoff, floors, from_home=False, go_home=True)
+        return plan_collect(pickup, dropoff, floors,
+                            from_home=bool(req["from_home"]), go_home=True)
     except (ValueError, KeyError) as e:
         # 生成器が組めない形。tick を落とさず、依頼を閉じて理由を残す。
         # いちばん多いのは「init は HOME の階からしかできない」:

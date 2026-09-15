@@ -95,6 +95,10 @@ CREATE TABLE IF NOT EXISTS request (
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
     started_at    TEXT,
+    -- 走行開始時にロボットが HOME にいたか。1 なら計画は init と移動から始まる。
+    -- 計画は毎 tick 作り直す(覚えない)ので、開始時の事実をここに残す。
+    -- collect は普通は荷降ろし直後(0)だが、E7 で満杯を解消する回収は HOME から出る(1)
+    from_home     INTEGER NOT NULL DEFAULT 0 CHECK (from_home IN (0, 1)),
     delivered_at  TEXT,                          -- collect では「戻し終わった時刻」
     confirmed_at  TEXT,                          -- delivery だけ
     cancelled_at  TEXT,                          -- 取消した時刻

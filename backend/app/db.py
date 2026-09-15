@@ -28,6 +28,21 @@ def get_db():
         conn.close()
 
 
+# 既存の DB に後から足した列。CREATE TABLE IF NOT EXISTS は既存テーブルを変えないので、
+# 無ければここで ALTER TABLE する(README 10 章の作り直しをせずに済む範囲: 制約なしの追加だけ)
+_ADDED_COLUMNS = [
+    ("request", "from_home", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    for table, column, decl in _ADDED_COLUMNS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _add_missing_columns(conn)
