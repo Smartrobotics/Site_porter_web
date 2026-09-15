@@ -6,6 +6,11 @@ interface Props {
   toLabel: string
   progress: number
   phase: RobotTransportPhase
+  /** 走行中の断片。無ければ progress だけで位置を決める(完了・待ちなど) */
+  fragmentKind?: string
+  fragmentSeq?: number
+  stepTotal?: number
+  robotFloor?: number
 }
 
 function levelOf(label: string): number {
@@ -15,10 +20,30 @@ function levelOf(label: string): number {
 
 /**
  * 建物断面の簡易イラスト。
- * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を progress に応じて描画。
+ * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を描く。
+ *
+ * 位置は「いまどの断片を走っているか」と「ロボットがいる階」から決める。
+ * 以前は進み(%)を 30/62/100 で3区間に切っていたが、断片の長さは走行ごとに
+ * 違うので、まだ廊下を走っているのにリフトの中に描かれることがあった。
+ *   init / pick_up      … いる階の荷台の位置
+ *   move_to_target      … 搬送元の階ならリフトへ向かう、搬送先の階ならリフトから荷台へ
+ *   elv                 … リフトの中を上下
+ *   put_down / return_home … 搬送先の荷台の位置
+ * 断片の中の進みは、なめらかにした progress をその断片の区間に割り付けて使う。
  */
-export function BuildingCrossSection({ fromLabel, toLabel, progress, phase }: Props) {
-  const goingUp = levelOf(toLabel) > levelOf(fromLabel)
+export function BuildingCrossSection({
+  fromLabel,
+  toLabel,
+  progress,
+  phase,
+  fragmentKind,
+  fragmentSeq,
+  stepTotal,
+  robotFloor,
+}: Props) {
+  const fromLevel = levelOf(fromLabel)
+  const toLevel = levelOf(toLabel)
+  const goingUp = toLevel > fromLevel
 
   // 上段/下段スラブ座標
   const TOP_Y = 44
@@ -28,23 +53,51 @@ export function BuildingCrossSection({ fromLabel, toLabel, progress, phase }: Pr
   const shaftX = 250
   const startX = 60
 
-  // ロボット位置(progress を3区間に分割)
-  let cx: number
-  let cy: number
   const p = Math.max(0, Math.min(100, progress))
-  if (p <= 30) {
-    const t = p / 30
-    cx = startX + (shaftX - startX) * t
-    cy = fromY
+
+  // 3つの区間。t は 0〜1
+  const toShaft = (t: number) => ({ cx: startX + (shaftX - startX) * t, cy: fromY })
+  const inShaft = (t: number) => ({ cx: shaftX, cy: fromY + (toY - fromY) * t })
+  const toTarget = (t: number) => ({ cx: shaftX - (shaftX - startX) * t, cy: toY })
+
+  // 断片の中での進み。progress は断片単位で段になっているので、
+  // この断片の区間 [(seq-1)/N, seq/N] に割り付ける
+  const localT = (() => {
+    if (!stepTotal || !fragmentSeq) return 0
+    const size = 100 / stepTotal
+    return Math.max(0, Math.min(1, (p - (fragmentSeq - 1) * size) / size))
+  })()
+
+  let pos: { cx: number; cy: number }
+  const onToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
+  if (fragmentKind && stepTotal) {
+    switch (fragmentKind) {
+      case 'init':
+      case 'pick_up':
+        pos = onToFloor ? toTarget(1) : toShaft(0)
+        break
+      case 'move_to_target':
+        pos = onToFloor ? toTarget(localT) : toShaft(localT)
+        break
+      case 'elv':
+        pos = inShaft(localT)
+        break
+      case 'put_down':
+      case 'return_home':
+        pos = toTarget(1)
+        break
+      default:
+        pos = toShaft(localT)
+    }
+  } else if (p <= 30) {
+    // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
+    pos = toShaft(p / 30)
   } else if (p <= 62) {
-    const t = (p - 30) / 32
-    cx = shaftX
-    cy = fromY + (toY - fromY) * t
+    pos = inShaft((p - 30) / 32)
   } else {
-    const t = (p - 62) / 38
-    cx = shaftX - (shaftX - startX) * t
-    cy = toY
+    pos = toTarget((p - 62) / 38)
   }
+  const { cx, cy } = pos
 
   const done = phase === 'completed'
   const isError = phase === 'error'

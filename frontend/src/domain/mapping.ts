@@ -35,6 +35,8 @@ export interface RequestRaw {
   confirmed_at: string | null
   robot_phase: string | null
   robot_scenario: string | null
+  /** ロボットがいる階(エレベーター断片の完了で更新)。走行中の依頼だけ */
+  robot_floor: number | null
   step_index: number | null
   step_total: number | null
 }
@@ -144,6 +146,9 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
     phase,
     progress: progressOf(r, phase),
     stepTotal: r.status === 'running' && r.step_total ? r.step_total : undefined,
+    fragmentKind: r.status === 'running' ? fragmentKind(r.robot_scenario) || undefined : undefined,
+    fragmentSeq: r.status === 'running' ? (r.step_index ?? undefined) : undefined,
+    robotFloor: r.status === 'running' ? (r.robot_floor ?? undefined) : undefined,
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

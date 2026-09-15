@@ -144,7 +144,16 @@ export function TaskDetail() {
 
       {/* 建物断面イラスト */}
       <div className="card" style={{ padding: '12px 8px 0' }}>
-        <BuildingCrossSection fromLabel={fromLabel} toLabel={toLabel} progress={smooth} phase={task.phase} />
+        <BuildingCrossSection
+          fromLabel={fromLabel}
+          toLabel={toLabel}
+          progress={smooth}
+          phase={task.phase}
+          fragmentKind={task.fragmentKind}
+          fragmentSeq={task.fragmentSeq}
+          stepTotal={task.stepTotal}
+          robotFloor={task.robotFloor}
+        />
       </div>
 
       {/* 進捗バー */}

@@ -41,6 +41,7 @@ class RequestOut(BaseModel):
     robot_phase: str | None
     # 走行中の断片名 run_<id>_<NN>_<kind>。画面はここから種別を読んでフェーズを決める
     robot_scenario: str | None
+    robot_floor: int | None = None
     step_index: int | None
     step_total: int | None
 

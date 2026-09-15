@@ -82,7 +82,7 @@ REQUEST_COLUMNS = """
        r.from_address_id, r.to_address_id,
        r.started_at, r.delivered_at, r.confirmed_at,
        fa.label AS from_area, ta.label AS to_area, rk.marker_id AS rack_marker_id,
-       rb.phase AS robot_phase, rb.scenario_name AS robot_scenario,
+       rb.phase AS robot_phase, rb.scenario_name AS robot_scenario, rb.floor AS robot_floor,
        rb.step_index, rb.step_total
 """
 

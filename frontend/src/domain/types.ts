@@ -58,6 +58,12 @@ export interface TransportTask extends TransportRequest {
   progress: number
   /** 走行の断片数。走行中だけ入る。進みの補間で「次の段まで」を知るために使う */
   stepTotal?: number
+  /** いま走っている断片の種別(init / pick_up / move_to_target / elv / put_down / return_home) */
+  fragmentKind?: string
+  /** その断片の番号(1始まり) */
+  fragmentSeq?: number
+  /** ロボットがいる階。断面図で「どの区間にいるか」を決める */
+  robotFloor?: number
   rawState?: number
   statusMessage: string
   robotTaskId?: string
