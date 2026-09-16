@@ -26,6 +26,7 @@ import {
   type User,
 } from './master'
 import { toTask, type RequestRaw } from './mapping'
+import { fetchWithTimeout } from '../lib/http'
 
 /** GET /api/robot。ロボットを動かすのはサーバー。画面は読むだけ */
 export interface RobotState {
@@ -200,7 +201,7 @@ function uid(prefix: string): string {
 
 /** 失敗したらサーバーが返した文面をそのまま投げる。E6 / E8 のモーダルに出る */
 async function send(path: string, body?: unknown): Promise<RequestRaw> {
-  const res = await fetch(path, {
+  const res = await fetchWithTimeout(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -250,9 +251,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (offlineRef.current) return
     try {
       const [reqRes, rackRes, robotRes] = await Promise.all([
-        fetch('/api/request'),
-        fetch('/api/rack'),
-        fetch('/api/robot'),
+        fetchWithTimeout('/api/request'),
+        fetchWithTimeout('/api/rack'),
+        fetchWithTimeout('/api/robot'),
       ])
       if (!reqRes.ok || !rackRes.ok || !robotRes.ok) throw new Error('fetch failed')
       const [requests, racks, rb] = await Promise.all([
@@ -288,7 +289,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     const get = async (path: string) => {
-      const res = await fetch(path)
+      const res = await fetchWithTimeout(path)
       if (!res.ok) throw new Error(`${path} -> ${res.status}`)
       return res.json()
     }
@@ -388,7 +389,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const resetRobotHome = async () => {
     try {
-      const res = await fetch('/api/robot/reset_home', { method: 'POST' })
+      const res = await fetchWithTimeout('/api/robot/reset_home', { method: 'POST' })
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string }
         throw new Error(body.detail ?? `HTTP ${res.status}`)
@@ -441,7 +442,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pendingReceiptCount,
     setCurrentArea: (areaId) => dispatch({ type: 'SET_CURRENT_AREA', areaId }),
     setRackMarker: async (rackId, markerId) => {
-      const res = await fetch(`/api/rack/${rackId}`, {
+      const res = await fetchWithTimeout(`/api/rack/${rackId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ marker_id: markerId }),
@@ -451,7 +452,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await refresh()
     },
     savePlacement: async (items) => {
-      const res = await fetch('/api/rack/placement', {
+      const res = await fetchWithTimeout('/api/rack/placement', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

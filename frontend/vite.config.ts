@@ -62,6 +62,21 @@ export default defineConfig(({ command }) => {
         '/api': {
           target: 'http://backend:8000',
           changeOrigin: true,
+          // backend が落ちていると proxy は接続を待ち続け、ブラウザには何も返さない。
+          // 5 秒で 504 を返して、画面側が「通信できない」と判断できるようにする
+          proxyTimeout: 5000,
+          timeout: 10000,
+          // backend コンテナが止まっていると DNS(getaddrinfo EAI_AGAIN)に 5 秒かかり、
+          // その後もブラウザへ応答が返らないことがあった。失敗したら必ず 502 を返す
+          configure(proxy) {
+            proxy.on('error', (_err, _req, res) => {
+              const r = res as import('node:http').ServerResponse
+              if (typeof r.writeHead === 'function' && !r.headersSent && !r.writableEnded) {
+                r.writeHead(502, { 'Content-Type': 'application/json' })
+                r.end(JSON.stringify({ detail: 'backend unavailable' }))
+              }
+            })
+          },
         },
       },
     },
