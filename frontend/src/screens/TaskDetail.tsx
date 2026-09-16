@@ -71,42 +71,6 @@ export function TaskDetail() {
         {!completedOnOpen && <PollingStamp style={{ marginTop: 6 }} />}
       </div>
 
-      {/* ポーリングで「搬送完了」を受け取った瞬間の通知。
-          この画面のポーリングを使い回すので、通知用のポーリングはしない */}
-      {isCompleted && !completedOnOpen && task.kind !== 'collect' && (
-        <div className="card card-pad fade-in" style={{ marginBottom: 16, borderLeft: '4px solid var(--green)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                background: 'var(--green-tint)',
-                color: 'var(--green-dark)',
-                display: 'grid',
-                placeItems: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <IconCheck size={18} />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>搬送が完了しました</div>
-              <div className="muted" style={{ fontSize: 12.5 }}>
-                「{task.itemName}」が届きました。受け取ったら受取確認を押してください。
-              </div>
-            </div>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ marginTop: 10 }}
-            onClick={() => navigate('/notifications')}
-          >
-            通知
-          </button>
-        </div>
-      )}
-
       {/* 完了演出 */}
       {isCompleted && (
         <div className="celebrate" style={{ marginBottom: 16 }}>
