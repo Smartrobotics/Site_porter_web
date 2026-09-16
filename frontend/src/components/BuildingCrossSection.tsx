@@ -62,13 +62,13 @@ interface Leg {
 const ELV_LEG_BY_INDEX: Leg[] = [
   { from: 1, to: 1, seconds: 0 }, // 0 elv_call_floor
   { from: 1, to: 1, seconds: 0 }, // 1 set_route_no
-  { from: 1, to: 2, seconds: 15 }, // 2 start_navigation
+  { from: 1, to: 2, seconds: 15 }, // 2 start_navigation(実測 13s, 2026-09-16 八潮)
   { from: 2, to: 2, seconds: 0 }, // 3 set_goal_elv
-  { from: 2, to: 3, seconds: 20 }, // 4 start_elv_goal_controller
+  { from: 2, to: 3, seconds: 14 }, // 4 start_elv_goal_controller(実測 12s)
   { from: 3, to: 3, seconds: 0 }, // 5 elv_boarding_check_enter
-  { from: 3, to: 4, seconds: 5 }, // 6 elv_get_on_off_flag(乗っている)
+  { from: 3, to: 4, seconds: 12 }, // 6 elv_get_on_off_flag(乗っている。試験用エレベーターで実測 11s。本物は要再測)
   { from: 4, to: 4, seconds: 0 }, // 7 set_goal_elv
-  { from: 4, to: 5, seconds: 20 }, // 8 start_elv_goal_controller
+  { from: 4, to: 5, seconds: 18 }, // 8 start_elv_goal_controller(実測 17s)
   { from: 5, to: 5, seconds: 0 }, // 9 elv_boarding_check_exit
   { from: 5, to: 5, seconds: 0 }, // 10 elv_get_on_off_flag
   { from: 5, to: 5, seconds: 0 }, // 11 set_map
@@ -76,9 +76,9 @@ const ELV_LEG_BY_INDEX: Leg[] = [
 ]
 
 /** 廊下の走行(move_to_target の start_navigation)の目安の所要時間(秒) */
-const CORRIDOR_SECONDS = 30
-/** 荷台の下から出る/入る move_forward_time。0.02 m/s で 41.65 s(move_forward_time.py) */
-const MOVE_FORWARD_SECONDS = 42
+const CORRIDOR_SECONDS = 32 // 実測 26〜32s(HOME→荷台 32、荷台→elv_wait 29、リフト→荷台 26)
+/** 荷台の下から出る/入る move_forward_time */
+const MOVE_FORWARD_SECONDS = 15 // 実測 10〜14s(move_forward_time は短縮済み)
 /** そのときの見た目のずれ(px)。荷台の位置から廊下側へ少し出る */
 const MOVE_FORWARD_SHIFT = 14
 
