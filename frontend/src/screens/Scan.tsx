@@ -36,6 +36,8 @@ export function Scan() {
   const [cam, setCam] = useState<CamState>('starting')
   // 権限は得たが video.play() が拒まれた(自動再生を許さないブラウザ)。人の操作で再生する
   const [needsTap, setNeedsTap] = useState(false)
+  // 荷台のマーカーではない QR(壁の場所 QR や伝票など)を読んだ。読み続ける
+  const [wrongQr, setWrongQr] = useState(false)
   // 拒まれた理由(NotAllowedError / NotFoundError など)。現場での切り分け用に出す
   const [camError, setCamError] = useState('')
 
@@ -103,8 +105,13 @@ export function Scan() {
 
           const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
           if (code && code.data) {
-            resolveMarker(code.data)
-            return
+            // QR で受けるのはマーカー ID そのもの(数字だけ)。URL や伝票の JSON は違う
+            const text = code.data.trim()
+            if (/^\d{1,4}$/.test(text)) {
+              resolveMarker(text)
+              return
+            }
+            setWrongQr(true)
           }
         }
       }
@@ -226,6 +233,17 @@ export function Scan() {
       )}
 
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {wrongQr && (
+        <div className="card card-pad" style={{ marginTop: 12, borderLeft: '4px solid var(--orange)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconScan size={17} /> 荷台のマーカーIDではありません
+          </div>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+            荷台に貼られたマーカーをかざしてください
+          </p>
+        </div>
+      )}
 
       <button className="btn btn-ghost" style={{ marginTop: 14 }} onClick={() => back()}>
         キャンセル
