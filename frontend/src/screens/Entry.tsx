@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { findArea, floorLabel, SITE_NAME } from '../domain/master'
@@ -11,6 +12,7 @@ import { IconPin, IconArrow, IconHome, IconAlert } from '../components/icons'
  * 未登録のIDだった場合(E1-2 / E1-3)は隠さずに知らせ、依頼画面で選び直してもらう。
  */
 export function Entry() {
+  useScreenData()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { master, masterLoaded, setCurrentArea } = useStore()

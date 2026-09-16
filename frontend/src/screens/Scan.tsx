@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useLocation, useNavigate } from 'react-router-dom'
 import jsQR from 'jsqr'
 import { createArucoDetector, createStableVote } from '../lib/aruco'
@@ -21,6 +22,7 @@ const FRAME_WIDTH = 640
  * 読み取れなければキャンセルで戻り、入力画面で手入力する。
  */
 export function Scan() {
+  useScreenData()
   const navigate = useNavigate()
   const location = useLocation()
   const { racks } = useStore()

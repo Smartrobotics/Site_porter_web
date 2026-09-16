@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { robotPhaseLabel, useStore } from '../domain/store'
@@ -15,6 +16,7 @@ function entryUrl(areaId: number): string {
 }
 
 export function Settings() {
+  useScreenData()
   const navigate = useNavigate()
   const {
     master,

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import type { Priority } from '../domain/types'
@@ -37,6 +38,7 @@ interface LocationState {
 }
 
 export function Request() {
+  useScreenData()
   const navigate = useNavigate()
   const location = useLocation()
   const { racks, users, currentArea, setCurrentArea, areas, master, tasks } = useStore()

@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useScreenData } from '../lib/useScreenData'
 import { IconCheck } from '../components/icons'
 
 export interface SentState {
@@ -11,6 +12,7 @@ export interface SentState {
  * ボタンを押してもらう(受付だけの場合は見せても意味がないため)。
  */
 export function RequestSent() {
+  useScreenData()
   const navigate = useNavigate()
   const location = useLocation()
   const state = location.state as SentState | null

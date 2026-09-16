@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useLocation, useNavigate } from 'react-router-dom'
 import jsQR from 'jsqr'
 import { IconScan, IconDoc } from '../components/icons'
@@ -31,6 +32,7 @@ function parseSlip(text: string): SlipPayload | null {
  * 読み取れないときはキャンセルで戻り、入力画面で手入力する。
  */
 export function SlipScan() {
+  useScreenData()
   const navigate = useNavigate()
   const location = useLocation()
   const form = (location.state as { form?: Record<string, unknown> } | null)?.form

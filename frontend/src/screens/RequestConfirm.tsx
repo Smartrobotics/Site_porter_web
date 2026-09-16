@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useScreenData } from '../lib/useScreenData'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { PRIORITY_LABEL } from '../domain/types'
@@ -14,6 +15,7 @@ export type ConfirmState = FormState
  * 送信前にもう一度内容を見せる。間違っていれば「戻る」で直す。
  */
 export function RequestConfirm() {
+  useScreenData()
   const navigate = useNavigate()
   const location = useLocation()
   const { master, startTransport } = useStore()

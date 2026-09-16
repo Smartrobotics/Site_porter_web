@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
+import { useScreenData } from '../lib/useScreenData'
 import { useStore } from '../domain/store'
 import { addressLabel, areaLabel, findRack } from '../domain/master'
 
@@ -15,6 +16,7 @@ function stamp(ts: number): string {
  * ここでもう一度確認してから確定する。
  */
 export function ReceiptConfirm() {
+  useScreenData()
   const navigate = useNavigate()
   const { id } = useParams()
   const { tasks, master, confirmReceipt } = useStore()
