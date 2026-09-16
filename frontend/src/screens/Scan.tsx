@@ -34,6 +34,10 @@ export function Scan() {
   const rafRef = useRef<number>(0)
 
   const [cam, setCam] = useState<CamState>('starting')
+  // 権限は得たが video.play() が拒まれた(自動再生を許さないブラウザ)。人の操作で再生する
+  const [needsTap, setNeedsTap] = useState(false)
+  // 拒まれた理由(NotAllowedError / NotFoundError など)。現場での切り分け用に出す
+  const [camError, setCamError] = useState('')
 
   /** 入力画面へ戻る。value があればマーカーID欄にそれを入れる */
   const back = (value?: string) => {
@@ -124,11 +128,14 @@ export function Scan() {
         streamRef.current = stream
         if (videoRef.current) {
           videoRef.current.srcObject = stream
-          await videoRef.current.play().catch(() => undefined)
+          // play() が拒まれると画面は真っ黒のまま。黙って続けず、人に押してもらう
+          const played = await videoRef.current.play().then(() => true, () => false)
+          if (!played) setNeedsTap(true)
         }
         setCam('live')
         rafRef.current = requestAnimationFrame(scanLoop)
-      } catch {
+      } catch (e) {
+        setCamError(e instanceof Error ? e.name : String(e))
         setCam('denied')
       }
     }
@@ -150,7 +157,33 @@ export function Scan() {
 
       {cam === 'live' || cam === 'starting' ? (
         <div className="scanner">
-          <video ref={videoRef} playsInline muted />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            onLoadedMetadata={(e) => {
+              // srcObject を付けた直後の play() が早すぎるブラウザ向けに、メタデータが来たらもう一度
+              void e.currentTarget.play().then(
+                () => setNeedsTap(false),
+                () => setNeedsTap(true),
+              )
+            }}
+          />
+          {needsTap && (
+            <button
+              className="btn btn-primary"
+              style={{ position: 'absolute', left: '10%', right: '10%', top: '45%' }}
+              onClick={() => {
+                void videoRef.current?.play().then(
+                  () => setNeedsTap(false),
+                  () => setNeedsTap(true),
+                )
+              }}
+            >
+              タップしてカメラを開始
+            </button>
+          )}
           <div className="scan-frame">
             <div className="scan-corner tl" />
             <div className="scan-corner tr" />
@@ -181,6 +214,11 @@ export function Scan() {
           <div style={{ fontWeight: 700 }}>
             {cam === 'denied' ? 'カメラを利用できません' : 'この環境ではカメラが使えません'}
           </div>
+          {camError && (
+            <div className="muted mono" style={{ fontSize: 11, marginTop: 2 }}>
+              {camError}
+            </div>
+          )}
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             キャンセルで入力画面に戻り、マーカーIDを手入力してください
           </p>
