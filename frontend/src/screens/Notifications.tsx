@@ -21,8 +21,12 @@ function stamp(ts: number): string {
 export function Notifications() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, master } = useStore()
-  const [recipient, setRecipient] = useState('')
+  const { tasks, master, viewerUserId } = useStore()
+  // 個人リンク(?user_id=N)で開いた端末は、その人宛だけを見せる(仕様 4 章)。
+  // 無い端末(配送員)は全件で、受取人の絞り込みは手で選ぶ
+  const viewer = viewerUserId !== undefined ? master.users.find((u) => u.id === viewerUserId) : undefined
+  const [manualRecipient, setManualRecipient] = useState('')
+  const recipient = viewer ? viewer.name : manualRecipient
 
   const pending = useMemo(
     () =>
@@ -53,17 +57,23 @@ export function Notifications() {
         <p>受取確認が済んでいない荷物 {pending.length} 件</p>
       </div>
 
-      <div className="field">
-        <label>受取人</label>
-        <select className="select" value={recipient} onChange={(e) => setRecipient(e.target.value)}>
-          <option value="">フィルタなし</option>
-          {recipients.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </div>
+      {viewer ? (
+        <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+          {viewer.name}様宛の通知だけを表示しています
+        </p>
+      ) : (
+        <div className="field">
+          <label>受取人</label>
+          <select className="select" value={manualRecipient} onChange={(e) => setManualRecipient(e.target.value)}>
+            <option value="">フィルタなし</option>
+            {recipients.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {pending.length === 0 ? (
         <div className="card">

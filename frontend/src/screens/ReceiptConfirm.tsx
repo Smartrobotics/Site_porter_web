@@ -19,7 +19,10 @@ export function ReceiptConfirm() {
   useScreenData()
   const navigate = useNavigate()
   const { id } = useParams()
-  const { tasks, master, confirmReceipt } = useStore()
+  const { tasks, master, confirmReceipt, viewerUserId } = useStore()
+  // 受取確認はご本人だけ(仕様 U-9)。個人リンクで開いた端末では宛先が違えば押せない。
+  // 配送員の端末(user_id なし)は誰か分からないので止めない
+  const viewer = viewerUserId !== undefined ? master.users.find((u) => u.id === viewerUserId) : undefined
 
   const task = tasks.find((t) => t.id === Number(id))
   if (!task) {
@@ -67,15 +70,24 @@ export function ReceiptConfirm() {
         ))}
       </div>
 
-      <button
-        className="btn btn-primary"
-        onClick={() => {
-          confirmReceipt(task.id)
-          navigate('/notifications', { replace: true })
-        }}
-      >
-        確認
-      </button>
+      {viewer && task.recipient && task.recipient !== viewer.name ? (
+        <div className="card card-pad" style={{ borderLeft: '4px solid var(--orange)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>この荷物は {task.recipient}様宛です</div>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+            受取確認はご本人の端末から行ってください。
+          </p>
+        </div>
+      ) : (
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            confirmReceipt(task.id)
+            navigate('/notifications', { replace: true })
+          }}
+        >
+          確認
+        </button>
+      )}
       <button
         className="btn btn-ghost"
         style={{ marginTop: 10 }}
