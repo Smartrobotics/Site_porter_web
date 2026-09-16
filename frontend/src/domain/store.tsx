@@ -199,16 +199,29 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 }
 
-/** 失敗したらサーバーが返した文面をそのまま投げる。E6 / E8 のモーダルに出る */
+/**
+ * 失敗したらモーダルに出す文面を投げる。
+ *   サーバーに届かない(時間切れ・接続失敗・proxy の 502/503/504) … E6 の文面
+ *   サーバーが断った(400 系など、detail 付き)                      … その文面(E8 など)
+ * 「/api/request: 8000ms 以内に応答がありません」のような内部の文言は人に見せない
+ */
 async function send(path: string, body?: unknown): Promise<RequestRaw> {
-  const res = await fetchWithTimeout(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetchWithTimeout(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    throw new Error(DEMO_ERROR_MESSAGE.e6)
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    throw new Error(DEMO_ERROR_MESSAGE.e6)
+  }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    const detail = data && typeof data.detail === 'string' ? data.detail : `${path} -> ${res.status}`
+    const detail = data && typeof data.detail === 'string' ? data.detail : DEMO_ERROR_MESSAGE.e6
     throw new Error(detail)
   }
   return data as RequestRaw
