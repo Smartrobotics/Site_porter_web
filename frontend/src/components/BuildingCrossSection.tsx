@@ -3,6 +3,8 @@ import type { RobotTransportPhase } from '../domain/phase'
 import { phaseIndex } from '../domain/phase'
 
 interface Props {
+  /** 依頼の id。変わったら「戻らない」ための記憶を捨てる */
+  taskId: number | string
   fromLabel: string
   toLabel: string
   progress: number
@@ -131,16 +133,22 @@ function useLegClock(key: string, seconds: number): number {
  * 建物断面の簡易イラスト。
  * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を描く。
  *
- * 位置は「いまどの断片を走っているか」と「ロボットがいる階」から決める。
- *   init / pick_up      … いる階の荷台の位置
- *   move_to_target      … 搬送元の階なら荷台から点1(elv_wait)へ、搬送先の階なら点5から荷台へ
- *   elv                 … 上の6点をアクションに従って進む
- *   put_down / return_home … 搬送先の荷台の位置
- * 動くのはロボットが実際に走るアクションの間だけ(start_navigation /
- * start_elv_goal_controller / リフトの中)。その間の進みはアクションが変わってからの
- * 経過時間で出す。設定・確認のアクションでは止まって見える。
+ * 位置は「経路上の距離 s」ひとつで持つ。経路は
+ *   荷台(出発階) → 点1 → 点2 → 点3 → 点4 → 点5 → 荷台(到着階)
+ * の折れ線で、s はその上の px。断片とアクションから s を決め、
+ * 同じ依頼の中では s を決して戻さない(前回より小さくなったら前回の値を使う)。
+ * 区間の終わりまで来てからアクションがまだ続いていても、
+ * 次のアクションで「区間の始点」に飛び戻ることが無いようにするため。
+ *
+ *   init / pick_up      … 出発階の荷台。move_forward_time で荷台から少し出る
+ *   move_to_target      … start_navigation の間に荷台→点1、到着階なら点5→荷台の手前
+ *   elv                 … 6点をアクションに従って進む(動くアクションの間だけ)
+ *   put_down            … move_forward_time で荷台の手前→荷台
+ *   return_home         … 到着階の荷台
+ * 動いている区間の中の進みはアクションが変わってからの経過時間で出す。
  */
 export function BuildingCrossSection({
+  taskId,
   fromLabel,
   toLabel,
   progress,
@@ -168,6 +176,44 @@ export function BuildingCrossSection({
 
   const p = Math.max(0, Math.min(100, progress))
 
+  // 経路の折れ線と、その上の目印の距離
+  const route = [
+    { x: startX, y: fromY }, // 荷台(出発階)
+    { x: WAIT_X, y: fromY }, // 点1
+    { x: DOOR_X, y: fromY }, // 点2
+    { x: shaftX, y: fromY }, // 点3
+    { x: shaftX, y: toY }, // 点4
+    { x: DOOR_X, y: toY }, // 点5
+    { x: startX, y: toY }, // 荷台(到着階)
+  ]
+  const cum: number[] = [0]
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1]
+    const b = route[i]
+    cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y))
+  }
+  const TOTAL = cum[cum.length - 1]
+  // 目印: 点n の s は cum[n]。荷台のすぐ外(OUT)と到着階の荷台の手前(IN)
+  const S_RACK_FROM = 0
+  const S_OUT = MOVE_FORWARD_SHIFT
+  const S_WP = (n: WP) => cum[n]
+  const S_IN = TOTAL - MOVE_FORWARD_SHIFT
+  const S_RACK_TO = TOTAL
+
+  const posAt = (s: number) => {
+    const v = Math.max(0, Math.min(TOTAL, s))
+    for (let i = 1; i < route.length; i++) {
+      if (v <= cum[i]) {
+        const t = cum[i] === cum[i - 1] ? 1 : (v - cum[i - 1]) / (cum[i] - cum[i - 1])
+        const a = route[i - 1]
+        const b = route[i]
+        return { cx: a.x + (b.x - a.x) * t, cy: a.y + (b.y - a.y) * t }
+      }
+    }
+    const last = route[route.length - 1]
+    return { cx: last.x, cy: last.y }
+  }
+
   const isElv = fragmentKind === 'elv'
   const isCorridor = fragmentKind === 'move_to_target'
   const atRack = fragmentKind === 'init' || fragmentKind === 'pick_up' || fragmentKind === 'put_down'
@@ -177,7 +223,7 @@ export function BuildingCrossSection({
         from: 1,
         to: 1,
         // 廊下: start_navigation のときだけ動く。set_route_no は出発点で止まっている。
-        // 荷台の前: move_forward_time(荷台の下から出る/入る)のときだけ少しずれる
+        // 荷台の前: move_forward_time(荷台の下から出る/入る)のときだけ少し動く
         seconds:
           isCorridor && action === 'start_navigation'
             ? CORRIDOR_SECONDS
@@ -189,69 +235,48 @@ export function BuildingCrossSection({
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
   const legT = useLegClock(legKey, leg.seconds)
 
-  // 直線区間。t は 0〜1
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
-  const onFromFloor = (x: number) => ({ cx: x, cy: fromY })
-  const onToFloor = (x: number) => ({ cx: x, cy: toY })
 
-  // 6点の座標(点6 は描くだけで通らない)
-  const wp = (n: WP) => {
-    switch (n) {
-      case 1:
-        return onFromFloor(WAIT_X)
-      case 2:
-        return onFromFloor(DOOR_X)
-      case 3:
-        return onFromFloor(shaftX)
-      case 4:
-        return onToFloor(shaftX)
-      default:
-        return onToFloor(DOOR_X)
-    }
-  }
-  const between = (a: { cx: number; cy: number }, b: { cx: number; cy: number }, t: number) => ({
-    cx: lerp(a.cx, b.cx, t),
-    cy: lerp(a.cy, b.cy, t),
-  })
-
-  let pos: { cx: number; cy: number }
+  // いまの断片とアクションから、経路上の距離 s を出す
   const robotOnToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
+  let s: number
   if (fragmentKind && stepTotal) {
     switch (fragmentKind) {
       case 'init':
-      case 'pick_up': {
-        // move_forward_time の間だけ荷台の位置から少し廊下側へ出る
-        const x = startX + MOVE_FORWARD_SHIFT * legT
-        pos = robotOnToFloor ? onToFloor(x) : onFromFloor(x)
+      case 'pick_up':
+        // 出発階の荷台。move_forward_time で荷台のすぐ外へ
+        s = robotOnToFloor ? S_RACK_TO : lerp(S_RACK_FROM, S_OUT, legT)
         break
-      }
       case 'move_to_target':
-        // 廊下。start_navigation の間だけ動き、それ以外は出発点に止まっている
-        pos = robotOnToFloor
-          ? onToFloor(lerp(DOOR_X, startX, legT)) // 点5 → 荷台
-          : onFromFloor(lerp(startX, WAIT_X, legT)) // 荷台 → 点1
+        s = robotOnToFloor
+          ? lerp(S_WP(5), S_IN, legT) // 点5 → 荷台の手前
+          : lerp(S_OUT, S_WP(1), legT) // 荷台のすぐ外 → 点1
         break
       case 'elv':
-        pos = leg.seconds > 0 ? between(wp(leg.from), wp(leg.to), legT) : wp(leg.from)
+        s = leg.seconds > 0 ? lerp(S_WP(leg.from), S_WP(leg.to), legT) : S_WP(leg.from)
         break
       case 'put_down':
-        pos = onToFloor(startX + MOVE_FORWARD_SHIFT * legT)
+        s = lerp(S_IN, S_RACK_TO, legT) // 荷台の手前 → 荷台
         break
       case 'return_home':
-        pos = onToFloor(startX)
+        s = S_RACK_TO
         break
       default:
-        pos = onFromFloor(startX)
+        s = S_RACK_FROM
     }
-  } else if (p <= 30) {
-    // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
-    pos = onFromFloor(lerp(startX, shaftX, p / 30))
-  } else if (p <= 62) {
-    pos = { cx: shaftX, cy: lerp(fromY, toY, (p - 30) / 32) }
   } else {
-    pos = onToFloor(lerp(shaftX, startX, (p - 62) / 38))
+    // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
+    s = (p / 100) * TOTAL
   }
-  const { cx, cy } = pos
+  if (phase === 'completed') s = S_RACK_TO
+
+  // 同じ依頼の中では戻らない。依頼が変わったら計り直す
+  const maxRef = useRef<{ key: number | string; s: number }>({ key: taskId, s: 0 })
+  if (maxRef.current.key !== taskId) maxRef.current = { key: taskId, s: 0 }
+  if (s < maxRef.current.s) s = maxRef.current.s
+  else maxRef.current.s = s
+
+  const { cx, cy } = posAt(s)
 
   const done = phase === 'completed'
   const isError = phase === 'error'

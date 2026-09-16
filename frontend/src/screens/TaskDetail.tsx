@@ -145,6 +145,7 @@ export function TaskDetail() {
       {/* 建物断面イラスト */}
       <div className="card" style={{ padding: '12px 8px 0' }}>
         <BuildingCrossSection
+          taskId={task.id}
           fromLabel={fromLabel}
           toLabel={toLabel}
           progress={smooth}
