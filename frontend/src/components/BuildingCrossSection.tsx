@@ -221,8 +221,10 @@ export function BuildingCrossSection({
   const fromY = goingUp ? BOT_Y : TOP_Y
   const toY = goingUp ? TOP_Y : BOT_Y
   const shaftX = 251 // リフトの中央(シャフトは x=236〜266)
-  const startX = 60 // 荷台の位置
-  const HOME_X = 36 // 出発階の HOME。荷台の少し手前。init はここから始まる
+  // HOME → 荷台 の区間は 30 秒かかるのに、以前は 16px しか無かった。
+  // 0.5px/s は画面では「2 秒に 1px 飛ぶ」ようにしか見えない。区間を長く取る
+  const startX = 110 // 荷台の位置
+  const HOME_X = 40 // 出発階の HOME。init はここから始まる
   const WAIT_X = 190 // 点1 / 点6: elv_wait
   const DOOR_X = 222 // 点2 / 点5: 扉の前
 
@@ -248,7 +250,7 @@ export function BuildingCrossSection({
   const TOTAL = cum[cum.length - 1]
   // 目印: HOME → (init で少し出る) → 荷台 → (荷台から出る) → 点1 … 点5 → 荷台の手前 → 荷台
   const S_HOME = 0
-  const S_INIT_OUT = cum[1] / 3 // init の move_forward_time で HOME から少し出た所
+  const S_INIT_OUT = MOVE_FORWARD_SHIFT // init の move_forward_time で HOME から少し出た所
   const S_RACK_FROM = cum[1]
   const S_OUT = S_RACK_FROM + MOVE_FORWARD_SHIFT
   const S_WP = (n: WP) => cum[n + 1]
