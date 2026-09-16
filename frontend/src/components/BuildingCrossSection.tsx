@@ -66,7 +66,7 @@ const ELV_LEG_BY_INDEX: Leg[] = [
   { from: 2, to: 2, seconds: 0 }, // 3 set_goal_elv
   { from: 2, to: 3, seconds: 20 }, // 4 start_elv_goal_controller
   { from: 3, to: 3, seconds: 0 }, // 5 elv_boarding_check_enter
-  { from: 3, to: 4, seconds: 40 }, // 6 elv_get_on_off_flag(乗っている)
+  { from: 3, to: 4, seconds: 5 }, // 6 elv_get_on_off_flag(乗っている)
   { from: 4, to: 4, seconds: 0 }, // 7 set_goal_elv
   { from: 4, to: 5, seconds: 20 }, // 8 start_elv_goal_controller
   { from: 5, to: 5, seconds: 0 }, // 9 elv_boarding_check_exit
@@ -137,34 +137,35 @@ function useLegClock(key: string, seconds: number, since?: number): number {
 }
 
 /**
- * 目標の位置へなめらかに寄せる。
+ * 目標の位置へ、速度の上限を守りながら寄せる。
  *
- * 画面は 3 秒ごとにサーバーを読むが、エレベーター断片の中の設定・確認アクションは
- * 数秒で終わる。次に読んだときにはもう2つ先の区間に入っていて、目標位置が
- * 区間ひとつ分いきなり先へ飛ぶ。そのまま描くとリフトの中でロボットが瞬間移動する。
- * ここでは表示位置を目標へ時定数 tau で寄せる。目標が戻ることは無い
- * (同じ依頼の中では s は単調)ので、戻ったときは依頼が変わったとみなして即座に合わせる。
+ * 画面は 3 秒ごとにサーバーを読む。区間が短い(5 秒のリフトなど)と、気付いた時点で
+ * 目標はもう区間の半ばにあり、そこへ一気に寄せると瞬間移動に見える。
+ * そこで表示位置は 1 秒に maxSpeed px までしか進まない。maxSpeed は
+ * 「その区間の見た目の速度 × 1.5」なので、遅れは少しずつ取り戻し、飛ばない。
+ * 目標が戻ることは無い(同じ依頼の中では s は単調)ので、戻ったときは
+ * 依頼が変わったとみなして即座に合わせる。
  */
-function useEased(target: number, tau = 0.6): number {
+function useEased(target: number, maxSpeed: number): number {
   const [shown, setShown] = useState(target)
   const shownRef = useRef(target)
   const targetRef = useRef(target)
+  const speedRef = useRef(maxSpeed)
   targetRef.current = target
+  speedRef.current = maxSpeed
   useEffect(() => {
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
-      const dt = (now - last) / 1000
+      const dt = Math.min(0.5, (now - last) / 1000) // タブが裏に回っていた分は飛ばさない
       last = now
       const t = targetRef.current
       const cur = shownRef.current
       let next = cur
       if (t < cur) {
         next = t // 依頼が変わった: 戻るときだけ即座に
-      } else if (t - cur > 0.05) {
-        next = cur + (t - cur) * (1 - Math.exp(-dt / tau))
-      } else if (t !== cur) {
-        next = t
+      } else if (t > cur) {
+        next = Math.min(t, cur + speedRef.current * dt)
       }
       if (next !== cur) {
         shownRef.current = next
@@ -174,7 +175,7 @@ function useEased(target: number, tau = 0.6): number {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [tau])
+  }, [])
   return shown
 }
 
@@ -337,8 +338,19 @@ export function BuildingCrossSection({
   if (s < maxRef.current.s) s = maxRef.current.s
   else maxRef.current.s = s
 
-  // 目標 s へなめらかに寄せてから描く
-  const shownS = useEased(s)
+  // 目標 s へ寄せる速度の上限(px/s)。動いている区間ならその区間の見た目の速度 × 1.5、
+  // 止まっている区間(飛ばされた区間を追いつく)なら経路全体を 8 秒で渡る速さ
+  const CATCH_UP_PX_PER_SEC = TOTAL / 8
+  const legLenPx = (() => {
+    if (leg.seconds <= 0) return 0
+    if (isElv) return Math.abs(S_WP(leg.to) - S_WP(leg.from))
+    if (isCorridor) return robotOnToFloor ? S_IN - S_WP(5) : S_WP(1) - S_OUT
+    if (fragmentKind === 'pick_up' && action === 'start_navigation') return S_RACK_FROM - S_INIT_OUT
+    return MOVE_FORWARD_SHIFT
+  })()
+  const maxSpeed =
+    leg.seconds > 0 ? Math.max(CATCH_UP_PX_PER_SEC / 2, (legLenPx / leg.seconds) * 1.5) : CATCH_UP_PX_PER_SEC
+  const shownS = useEased(s, maxSpeed)
   const { cx, cy } = posAt(shownS)
 
   const done = phase === 'completed'
