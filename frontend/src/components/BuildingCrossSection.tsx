@@ -23,78 +23,81 @@ function levelOf(label: string): number {
 }
 
 /**
- * エレベーター断片(backend/app/scenario/fragments/elv.json)の中の区間。
+ * エレベーター断片(backend/app/scenario/fragments/elv.json)の中の位置。
  * 番号はその JSON の steps の並び。名前だけでは足りない:
- * set_goal_elv と elv_get_on_off_flag は乗るときと降りるときの2回出る。
+ * set_goal_elv / start_elv_goal_controller / elv_get_on_off_flag は乗るときと降りるときの2回出る。
  *
  *   点1 = elv_wait(呼び出し待ち)   点2 = 扉の前   点3 = リフトの中(出発階)
  *   点4 = リフトの中(到着階)        点5 = 扉の前(到着階)   点6 = elv_wait(到着階、通らない)
  *
- *   0 elv_call_floor                       … 点1 で待つ
- *   1 set_route_no / 2 start_navigation    … 点1 → 点2
- *   3 set_goal_elv / 4 start_elv_goal_controller / 5 elv_boarding_check_enter … 点2 → 点3
- *   6 elv_get_on_off_flag                  … 点3 → 点4(乗っている。時間で進める)
- *   7 set_goal_elv / 8 start_elv_goal_controller / 9 elv_boarding_check_exit … 点4 → 点5
- *   10 elv_get_on_off_flag / 11 set_map / 12 set_robot_position … 点5 で止まる
+ * ロボットが実際に動くアクションのときだけ動かす。設定や確認のアクションでは止まっている:
+ *   0 elv_call_floor              点1 で待つ
+ *   1 set_route_no                点1
+ *   2 start_navigation            点1 → 点2
+ *   3 set_goal_elv                点2
+ *   4 start_elv_goal_controller   点2 → 点3
+ *   5 elv_boarding_check_enter    点3
+ *   6 elv_get_on_off_flag         点3 → 点4(リフトが動く。時間で進める)
+ *   7 set_goal_elv                点4
+ *   8 start_elv_goal_controller   点4 → 点5
+ *   9 elv_boarding_check_exit     点5
+ *   10 elv_get_on_off_flag / 11 set_map / 12 set_robot_position   点5
  *
- * 区間の中の進みはサーバーからは来ない(アクションが変わった時だけ分かる)ので、
+ * 動く区間の中の進みはサーバーからは来ない(アクションが変わった時だけ分かる)ので、
  * アクションが変わってからの経過時間を目安の所要時間で割って進める。
  * 次のアクションが来る前に着いてしまわないよう 92% で止める。
  */
-type ElvLeg = 'wait' | 'toDoor' | 'enter' | 'ride' | 'exit' | 'done'
+type WP = 1 | 2 | 3 | 4 | 5
+interface Leg {
+  from: WP
+  to: WP
+  /** 目安の所要時間(秒)。0 なら止まっている(from の位置) */
+  seconds: number
+}
 
-const ELV_LEG_BY_INDEX: ElvLeg[] = [
-  'wait', // 0 elv_call_floor
-  'toDoor', // 1 set_route_no
-  'toDoor', // 2 start_navigation
-  'enter', // 3 set_goal_elv
-  'enter', // 4 start_elv_goal_controller
-  'enter', // 5 elv_boarding_check_enter
-  'ride', // 6 elv_get_on_off_flag
-  'exit', // 7 set_goal_elv
-  'exit', // 8 start_elv_goal_controller
-  'exit', // 9 elv_boarding_check_exit
-  'done', // 10 elv_get_on_off_flag
-  'done', // 11 set_map
-  'done', // 12 set_robot_position
+const ELV_LEG_BY_INDEX: Leg[] = [
+  { from: 1, to: 1, seconds: 0 }, // 0 elv_call_floor
+  { from: 1, to: 1, seconds: 0 }, // 1 set_route_no
+  { from: 1, to: 2, seconds: 15 }, // 2 start_navigation
+  { from: 2, to: 2, seconds: 0 }, // 3 set_goal_elv
+  { from: 2, to: 3, seconds: 20 }, // 4 start_elv_goal_controller
+  { from: 3, to: 3, seconds: 0 }, // 5 elv_boarding_check_enter
+  { from: 3, to: 4, seconds: 40 }, // 6 elv_get_on_off_flag(乗っている)
+  { from: 4, to: 4, seconds: 0 }, // 7 set_goal_elv
+  { from: 4, to: 5, seconds: 20 }, // 8 start_elv_goal_controller
+  { from: 5, to: 5, seconds: 0 }, // 9 elv_boarding_check_exit
+  { from: 5, to: 5, seconds: 0 }, // 10 elv_get_on_off_flag
+  { from: 5, to: 5, seconds: 0 }, // 11 set_map
+  { from: 5, to: 5, seconds: 0 }, // 12 set_robot_position
 ]
 
-/** 区間ごとの目安の所要時間(秒)。実測で直す */
-const ELV_LEG_SECONDS: Record<ElvLeg, number> = {
-  wait: 0,
-  toDoor: 15,
-  enter: 25,
-  ride: 40,
-  exit: 25,
-  done: 0,
-}
+/** 廊下の走行(move_to_target の start_navigation)の目安の所要時間(秒) */
+const CORRIDOR_SECONDS = 30
 
 const LEG_CEILING = 0.92
 
-function elvLeg(action: string | undefined, actionIndex: number | undefined): ElvLeg {
+function elvLeg(action: string | undefined, actionIndex: number | undefined): Leg {
   if (actionIndex !== undefined && actionIndex >= 0 && actionIndex < ELV_LEG_BY_INDEX.length) {
     return ELV_LEG_BY_INDEX[actionIndex]
   }
   // 番号が無い(古いデータ)ときは名前で最善を尽くす。2回出るものは前半扱い
   switch (action) {
-    case 'elv_call_floor':
-      return 'wait'
-    case 'set_route_no':
     case 'start_navigation':
-      return 'toDoor'
+      return ELV_LEG_BY_INDEX[2]
     case 'set_goal_elv':
+      return ELV_LEG_BY_INDEX[3]
     case 'start_elv_goal_controller':
+      return ELV_LEG_BY_INDEX[4]
     case 'elv_boarding_check_enter':
-      return 'enter'
+      return ELV_LEG_BY_INDEX[5]
     case 'elv_get_on_off_flag':
-      return 'ride'
+      return ELV_LEG_BY_INDEX[6]
     case 'elv_boarding_check_exit':
-      return 'exit'
     case 'set_map':
     case 'set_robot_position':
-      return 'done'
+      return ELV_LEG_BY_INDEX[9]
     default:
-      return 'wait'
+      return ELV_LEG_BY_INDEX[0]
   }
 }
 
@@ -129,7 +132,9 @@ function useLegClock(key: string, seconds: number): number {
  *   move_to_target      … 搬送元の階なら荷台から点1(elv_wait)へ、搬送先の階なら点5から荷台へ
  *   elv                 … 上の6点をアクションに従って進む
  *   put_down / return_home … 搬送先の荷台の位置
- * 断片の中の進みは、なめらかにした progress をその断片の区間に割り付けて使う。
+ * 動くのはロボットが実際に走るアクションの間だけ(start_navigation /
+ * start_elv_goal_controller / リフトの中)。その間の進みはアクションが変わってからの
+ * 経過時間で出す。設定・確認のアクションでは止まって見える。
  */
 export function BuildingCrossSection({
   fromLabel,
@@ -160,23 +165,39 @@ export function BuildingCrossSection({
   const p = Math.max(0, Math.min(100, progress))
 
   const isElv = fragmentKind === 'elv'
-  const leg = isElv ? elvLeg(action, actionIndex) : 'wait'
+  const isCorridor = fragmentKind === 'move_to_target'
+  const leg: Leg = isElv
+    ? elvLeg(action, actionIndex)
+    : // 廊下: start_navigation のときだけ動く。set_route_no は出発点で止まっている
+      { from: 1, to: 1, seconds: isCorridor && action === 'start_navigation' ? CORRIDOR_SECONDS : 0 }
   // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
-  const legKey = isElv ? `${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}` : 'none'
-  const legT = useLegClock(legKey, isElv ? ELV_LEG_SECONDS[leg] : 0)
+  const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
+  const legT = useLegClock(legKey, leg.seconds)
 
   // 直線区間。t は 0〜1
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
   const onFromFloor = (x: number) => ({ cx: x, cy: fromY })
   const onToFloor = (x: number) => ({ cx: x, cy: toY })
 
-  // 断片の中での進み。progress は断片単位で段になっているので、
-  // この断片の区間 [(seq-1)/N, seq/N] に割り付ける
-  const localT = (() => {
-    if (!stepTotal || !fragmentSeq) return 0
-    const size = 100 / stepTotal
-    return Math.max(0, Math.min(1, (p - (fragmentSeq - 1) * size) / size))
-  })()
+  // 6点の座標(点6 は描くだけで通らない)
+  const wp = (n: WP) => {
+    switch (n) {
+      case 1:
+        return onFromFloor(WAIT_X)
+      case 2:
+        return onFromFloor(DOOR_X)
+      case 3:
+        return onFromFloor(shaftX)
+      case 4:
+        return onToFloor(shaftX)
+      default:
+        return onToFloor(DOOR_X)
+    }
+  }
+  const between = (a: { cx: number; cy: number }, b: { cx: number; cy: number }, t: number) => ({
+    cx: lerp(a.cx, b.cx, t),
+    cy: lerp(a.cy, b.cy, t),
+  })
 
   let pos: { cx: number; cy: number }
   const robotOnToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
@@ -187,37 +208,20 @@ export function BuildingCrossSection({
         pos = robotOnToFloor ? onToFloor(startX) : onFromFloor(startX)
         break
       case 'move_to_target':
+        // 廊下。start_navigation の間だけ動き、それ以外は出発点に止まっている
         pos = robotOnToFloor
-          ? onToFloor(lerp(DOOR_X, startX, localT)) // 点5 → 荷台
-          : onFromFloor(lerp(startX, WAIT_X, localT)) // 荷台 → 点1
+          ? onToFloor(lerp(DOOR_X, startX, legT)) // 点5 → 荷台
+          : onFromFloor(lerp(startX, WAIT_X, legT)) // 荷台 → 点1
         break
       case 'elv':
-        switch (leg) {
-          case 'wait':
-            pos = onFromFloor(WAIT_X)
-            break
-          case 'toDoor':
-            pos = onFromFloor(lerp(WAIT_X, DOOR_X, legT))
-            break
-          case 'enter':
-            pos = onFromFloor(lerp(DOOR_X, shaftX, legT))
-            break
-          case 'ride':
-            pos = { cx: shaftX, cy: lerp(fromY, toY, legT) }
-            break
-          case 'exit':
-            pos = onToFloor(lerp(shaftX, DOOR_X, legT))
-            break
-          default:
-            pos = onToFloor(DOOR_X)
-        }
+        pos = leg.seconds > 0 ? between(wp(leg.from), wp(leg.to), legT) : wp(leg.from)
         break
       case 'put_down':
       case 'return_home':
         pos = onToFloor(startX)
         break
       default:
-        pos = onFromFloor(lerp(startX, WAIT_X, localT))
+        pos = onFromFloor(startX)
     }
   } else if (p <= 30) {
     // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
