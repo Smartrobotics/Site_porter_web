@@ -130,6 +130,48 @@ function useLegClock(key: string, seconds: number): number {
 }
 
 /**
+ * 目標の位置へなめらかに寄せる。
+ *
+ * 画面は 3 秒ごとにサーバーを読むが、エレベーター断片の中の設定・確認アクションは
+ * 数秒で終わる。次に読んだときにはもう2つ先の区間に入っていて、目標位置が
+ * 区間ひとつ分いきなり先へ飛ぶ。そのまま描くとリフトの中でロボットが瞬間移動する。
+ * ここでは表示位置を目標へ時定数 tau で寄せる。目標が戻ることは無い
+ * (同じ依頼の中では s は単調)ので、戻ったときは依頼が変わったとみなして即座に合わせる。
+ */
+function useEased(target: number, tau = 0.6): number {
+  const [shown, setShown] = useState(target)
+  const shownRef = useRef(target)
+  const targetRef = useRef(target)
+  targetRef.current = target
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000
+      last = now
+      const t = targetRef.current
+      const cur = shownRef.current
+      let next = cur
+      if (t < cur) {
+        next = t // 依頼が変わった: 戻るときだけ即座に
+      } else if (t - cur > 0.05) {
+        next = cur + (t - cur) * (1 - Math.exp(-dt / tau))
+      } else if (t !== cur) {
+        next = t
+      }
+      if (next !== cur) {
+        shownRef.current = next
+        setShown(next)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [tau])
+  return shown
+}
+
+/**
  * 建物断面の簡易イラスト。
  * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を描く。
  *
@@ -287,7 +329,9 @@ export function BuildingCrossSection({
   if (s < maxRef.current.s) s = maxRef.current.s
   else maxRef.current.s = s
 
-  const { cx, cy } = posAt(s)
+  // 目標 s へなめらかに寄せてから描く
+  const shownS = useEased(s)
+  const { cx, cy } = posAt(shownS)
 
   const done = phase === 'completed'
   const isError = phase === 'error'
