@@ -110,64 +110,6 @@ function elvLeg(action: string | undefined, actionIndex: number | undefined): Le
 }
 
 /**
- * 動くアクションの実際の所要時間を覚える。
- *
- * 目安の秒数(ELV_LEG_BY_INDEX 等)は現場ごとに合わない: 試験用のエレベーターは
- * 10 秒で着き、本物は 1 分かかる。アクションが切り替わったとき、前のアクションの
- * 所要時間 = 次の開始時刻 − 前の開始時刻 が分かるので、それを端末に残し、
- * 次の走行からは覚えた値で動かす。鍵は 断片種別:アクション番号。
- */
-const LEARNED_KEY = 'siteporter.legSeconds.v1'
-const MIN_LEARN_SEC = 1
-const MAX_LEARN_SEC = 600
-
-function loadLearned(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(LEARNED_KEY)
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveLearned(map: Record<string, number>): void {
-  try {
-    localStorage.setItem(LEARNED_KEY, JSON.stringify(map))
-  } catch {
-    // 保存できなくても動く。次回は目安の値に戻るだけ
-  }
-}
-
-function useLearnedSeconds(
-  fragmentKind: string | undefined,
-  actionIndex: number | undefined,
-  actionSince: number | undefined,
-  nominal: number,
-): number {
-  const learnedRef = useRef<Record<string, number>>(loadLearned())
-  const prevRef = useRef<{ key: string; since: number } | null>(null)
-  const key = fragmentKind !== undefined && actionIndex !== undefined ? `${fragmentKind}:${actionIndex}` : null
-
-  useEffect(() => {
-    if (!key || actionSince === undefined) return
-    const prev = prevRef.current
-    if (prev && prev.key !== key && actionSince > prev.since) {
-      // 前のアクションが終わった。所要時間を覚える(ならして急な外れ値を弱める)
-      const sec = (actionSince - prev.since) / 1000
-      if (sec >= MIN_LEARN_SEC && sec <= MAX_LEARN_SEC) {
-        const old = learnedRef.current[prev.key]
-        learnedRef.current[prev.key] = old === undefined ? sec : old * 0.5 + sec * 0.5
-        saveLearned(learnedRef.current)
-      }
-    }
-    if (!prev || prev.key !== key) prevRef.current = { key, since: actionSince }
-  }, [key, actionSince])
-
-  if (nominal <= 0 || !key) return nominal
-  return learnedRef.current[key] ?? nominal
-}
-
-/**
  * アクションが始まってからの経過で 0〜LEG_CEILING を返す。
  *
  * 開始時刻はサーバーが持つブリッジの stamp(since)を使う。画面を開き直しても、
@@ -343,9 +285,7 @@ export function BuildingCrossSection({
       }
   // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
-  // 目安の秒数の代わりに、前の走行で覚えた実際の所要時間があればそれを使う
-  const legSeconds = useLearnedSeconds(fragmentKind, actionIndex, actionSince, leg.seconds)
-  const legT = useLegClock(legKey, legSeconds, actionSince)
+  const legT = useLegClock(legKey, leg.seconds, actionSince)
 
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
