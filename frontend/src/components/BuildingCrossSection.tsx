@@ -296,15 +296,6 @@ export function BuildingCrossSection({
   const floorTop = { y: TOP_Y, label: goingUp ? toLabel : fromLabel }
   const floorBot = { y: BOT_Y, label: goingUp ? fromLabel : toLabel }
 
-  // 6点。名前は付けない
-  const waypoints = [
-    { x: WAIT_X, y: fromY },
-    { x: DOOR_X, y: fromY },
-    { x: shaftX, y: fromY },
-    { x: shaftX, y: toY },
-    { x: DOOR_X, y: toY },
-    { x: WAIT_X, y: toY },
-  ]
 
   return (
     <div className="cross-section">
@@ -345,11 +336,6 @@ export function BuildingCrossSection({
           strokeWidth="2.5"
           strokeLinecap="round"
         />
-
-        {/* エレベーター前後の通過点 */}
-        {waypoints.map((w, i) => (
-          <circle key={i} cx={w.x} cy={w.y} r="4" fill="#ffffff" stroke="#1B2D4F" strokeWidth="1.6" />
-        ))}
 
         {/* ロボット(荷台は描かない) */}
         {/* progress は useSmoothProgress が毎フレーム更新するので CSS トランジションは付けない */}
