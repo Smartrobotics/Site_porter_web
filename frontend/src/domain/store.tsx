@@ -101,6 +101,11 @@ export type DemoError = 'none' | 'e6' | 'e8'
 /** 画面遷移時にサーバーと通信できなかったときの共通メッセージ */
 export const SCREEN_LOAD_ERROR = 'サーバと通信できませんでした。時間をおいて再度お試しください。'
 
+/** 依頼の内容をサーバーが受け付けなかった(422)。画面の検証をすり抜けた場合だけ */
+export const INVALID_REQUEST_MESSAGE = '依頼の内容が正しくありません。入力を確認してください。'
+/** サーバー側の障害(500 など)。届いてはいるが処理できなかった */
+export const SERVER_FAULT_MESSAGE = 'サーバーでエラーが発生しました。時間をおいて再度お試しください。'
+
 export const DEMO_ERROR_MESSAGE: Record<'e6' | 'e8', string> = {
   e6: 'サーバーに接続できませんでした。時間をおいて再度お試しください。',
   e8: '指定された荷台は使用中です。別の荷台を選んでください。',
@@ -221,8 +226,12 @@ async function send(path: string, body?: unknown): Promise<RequestRaw> {
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    const detail = data && typeof data.detail === 'string' ? data.detail : DEMO_ERROR_MESSAGE.e6
-    throw new Error(detail)
+    // detail が文字列 … サーバーが理由を書いた(E8 など)。そのまま見せる
+    // detail が配列   … 入力検証(422)。項目ごとの英語の羅列なので人向けに言い換える
+    // それ以外        … 500 など。サーバーの障害
+    if (data && typeof data.detail === 'string') throw new Error(data.detail)
+    if (res.status === 422) throw new Error(INVALID_REQUEST_MESSAGE)
+    throw new Error(SERVER_FAULT_MESSAGE)
   }
   return data as RequestRaw
 }
