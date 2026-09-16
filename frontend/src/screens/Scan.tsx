@@ -144,8 +144,8 @@ export function Scan() {
   return (
     <div className="fade-in">
       <div className="page-head">
-        <h1>マーカースキャン</h1>
-        <p>荷台のマーカーをカメラにかざしてください</p>
+        <h1>マーカーIDスキャン</h1>
+        <p>荷台のマーカーIDをカメラにかざしてください</p>
       </div>
 
       {cam === 'live' || cam === 'starting' ? (
@@ -159,7 +159,7 @@ export function Scan() {
             <div className="scan-line" />
           </div>
           <div className="scan-hint">
-            {cam === 'starting' ? 'カメラを起動しています…' : 'マーカーを枠内に合わせてください'}
+            {cam === 'starting' ? 'カメラを起動しています…' : 'マーカーIDを枠内に合わせてください'}
           </div>
         </div>
       ) : (

@@ -122,7 +122,7 @@ export function Request() {
         className="btn btn-ghost btn-scan"
         onClick={() => navigate('/scan', { state: { form: formState() } })}
       >
-        荷台のマーカーを読み取る
+        荷台のマーカーIDを読み取る
         <span className="cam">
           <IconCamera size={21} />
         </span>
