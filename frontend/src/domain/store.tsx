@@ -484,9 +484,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })()
   }
 
-  // 回収は受取確認の対象外(荷台回収完了の通知は出さない)
+  // 回収は受取確認の対象外(荷台回収完了の通知は出さない)。
+  // 個人リンクで開いた端末は、通知画面と同じくその人宛だけを数える
+  const viewerName =
+    state.viewerUserId !== undefined ? master.users.find((u) => u.id === state.viewerUserId)?.name : undefined
   const pendingReceiptCount = tasks.filter(
-    (t) => t.kind !== 'collect' && t.phase === 'completed' && !t.confirmedAt,
+    (t) =>
+      t.kind !== 'collect' &&
+      t.phase === 'completed' &&
+      !t.confirmedAt &&
+      (!viewerName || t.recipient === viewerName),
   ).length
   const currentArea = findArea(master, state.currentAreaId)
 
