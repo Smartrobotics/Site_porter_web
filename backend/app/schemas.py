@@ -44,6 +44,7 @@ class RequestOut(BaseModel):
     robot_floor: int | None = None
     robot_action: str | None = None
     robot_action_index: int | None = None
+    robot_action_since: str | None = None
     step_index: int | None
     step_total: int | None
 

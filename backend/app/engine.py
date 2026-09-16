@@ -96,7 +96,7 @@ def _set_robot(conn: sqlite3.Connection, phase: str, scenario_name: str,
     # 断片が変わるので、前の断片のアクションは消す
     conn.execute(
         """UPDATE robot SET phase = ?, scenario_name = ?, step_index = ?, step_total = ?,
-                            action = NULL, action_index = NULL
+                            action = NULL, action_index = NULL, action_since = NULL
            WHERE id = ?""",
         (phase, scenario_name, index, total, ROBOT_ID),
     )
@@ -847,9 +847,10 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
     if status == "RUNNING" and name == expected:
         # 断片の中のステップ。依頼の進行は断片単位なので判断には使わないが、
         # 断面図がロボットの位置(リフトの前・中・後)を描くために残す
+        # stamp はエンジンがこのステップを publish した時刻 = アクションの開始時刻
         conn.execute(
-            "UPDATE robot SET action = ?, action_index = ? WHERE id = ?",
-            (state.get("action") or None, state.get("step_index"), ROBOT_ID),
+            "UPDATE robot SET action = ?, action_index = ?, action_since = ? WHERE id = ?",
+            (state.get("action") or None, state.get("step_index"), state.get("stamp"), ROBOT_ID),
         )
         log.debug(
             "断片 %s step %s/%s %s",

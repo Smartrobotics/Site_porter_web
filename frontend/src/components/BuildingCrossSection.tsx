@@ -17,6 +17,8 @@ interface Props {
   /** 断片の中でいま動いているアクションと番号(0始まり)。elv 断片の細かい位置に使う */
   action?: string
   actionIndex?: number
+  /** そのアクションが始まった時刻(ms)。無ければ「画面が気付いた時刻」から数える */
+  actionSince?: number
 }
 
 function levelOf(label: string): number {
@@ -108,24 +110,29 @@ function elvLeg(action: string | undefined, actionIndex: number | undefined): Le
 }
 
 /**
- * アクションが変わってからの経過で 0〜LEG_CEILING を返す。
- * 区間が変わったら 0 からやり直す。
+ * アクションが始まってからの経過で 0〜LEG_CEILING を返す。
+ *
+ * 開始時刻はサーバーが持つブリッジの stamp(since)を使う。画面を開き直しても、
+ * 3 秒のポーリングで気付くのが遅れても、同じ位置になる。
+ * since が無いときだけ「区間が変わったのに気付いた時刻」から数える。
  */
-function useLegClock(key: string, seconds: number): number {
-  const startRef = useRef<{ key: string; at: number }>({ key, at: performance.now() })
-  const [t, setT] = useState(0)
+function useLegClock(key: string, seconds: number, since?: number): number {
+  const noticedRef = useRef<{ key: string; at: number }>({ key, at: Date.now() })
+  const compute = () => {
+    if (seconds <= 0) return 0
+    const start = since ?? noticedRef.current.at
+    const elapsed = Math.max(0, (Date.now() - start) / 1000)
+    return Math.min(LEG_CEILING, elapsed / seconds)
+  }
+  const [t, setT] = useState(compute)
   useEffect(() => {
-    if (startRef.current.key !== key) {
-      startRef.current = { key, at: performance.now() }
-      setT(0)
-    }
+    if (noticedRef.current.key !== key) noticedRef.current = { key, at: Date.now() }
+    setT(compute())
     if (seconds <= 0) return
-    const id = window.setInterval(() => {
-      const elapsed = (performance.now() - startRef.current.at) / 1000
-      setT(Math.min(LEG_CEILING, elapsed / seconds))
-    }, 100)
+    const id = window.setInterval(() => setT(compute()), 100)
     return () => window.clearInterval(id)
-  }, [key, seconds])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, seconds, since])
   return seconds <= 0 ? 0 : t
 }
 
@@ -201,6 +208,7 @@ export function BuildingCrossSection({
   robotFloor,
   action,
   actionIndex,
+  actionSince,
 }: Props) {
   const fromLevel = levelOf(fromLabel)
   const toLevel = levelOf(toLabel)
@@ -277,7 +285,7 @@ export function BuildingCrossSection({
       }
   // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
-  const legT = useLegClock(legKey, leg.seconds)
+  const legT = useLegClock(legKey, leg.seconds, actionSince)
 
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 

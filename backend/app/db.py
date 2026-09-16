@@ -37,6 +37,7 @@ _ADDED_COLUMNS = [
     ("robot", "stuck_reason", "TEXT"),
     ("robot", "action", "TEXT"),
     ("robot", "action_index", "INTEGER"),
+    ("robot", "action_since", "TEXT"),
 ]
 
 

@@ -40,6 +40,8 @@ export interface RequestRaw {
   /** 断片の中でいま動いているアクションとその番号(0始まり)。断面図用 */
   robot_action: string | null
   robot_action_index: number | null
+  /** そのアクションの開始時刻(ISO8601、+09:00 付き) */
+  robot_action_since: string | null
   step_index: number | null
   step_total: number | null
 }
@@ -154,6 +156,13 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
     robotFloor: r.status === 'running' ? (r.robot_floor ?? undefined) : undefined,
     action: r.status === 'running' ? (r.robot_action ?? undefined) : undefined,
     actionIndex: r.status === 'running' ? (r.robot_action_index ?? undefined) : undefined,
+    actionSince:
+      r.status === 'running' && r.robot_action_since
+        ? (() => {
+            const ms = Date.parse(r.robot_action_since)
+            return Number.isNaN(ms) ? undefined : ms
+          })()
+        : undefined,
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

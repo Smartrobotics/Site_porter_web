@@ -84,6 +84,7 @@ REQUEST_COLUMNS = """
        fa.label AS from_area, ta.label AS to_area, rk.marker_id AS rack_marker_id,
        rb.phase AS robot_phase, rb.scenario_name AS robot_scenario, rb.floor AS robot_floor,
        rb.action AS robot_action, rb.action_index AS robot_action_index,
+       rb.action_since AS robot_action_since,
        rb.step_index, rb.step_total
 """
 

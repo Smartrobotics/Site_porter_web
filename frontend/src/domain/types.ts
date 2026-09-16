@@ -67,6 +67,8 @@ export interface TransportTask extends TransportRequest {
   /** 断片の中でいま動いているアクションと番号(0始まり)。エレベーター断片の細かい位置に使う */
   action?: string
   actionIndex?: number
+  /** そのアクションが始まった時刻(ms)。区間の中の進みはここからの経過で出す */
+  actionSince?: number
   rawState?: number
   statusMessage: string
   robotTaskId?: string

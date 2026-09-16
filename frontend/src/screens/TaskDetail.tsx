@@ -156,6 +156,7 @@ export function TaskDetail() {
           robotFloor={task.robotFloor}
           action={task.action}
           actionIndex={task.actionIndex}
+          actionSince={task.actionSince}
         />
       </div>
 

@@ -63,22 +63,14 @@ CREATE TABLE IF NOT EXISTS robot (
     phase         TEXT NOT NULL DEFAULT 'idle'
                   CHECK (phase IN ('idle','delivery','return','homing','error')),
     at_home       INTEGER NOT NULL DEFAULT 1 CHECK (at_home IN (0, 1)),
-    -- ロボットがいる階。エレベーター断片が SUCCESS した時点で行き先の階にする。
-    -- 最後の依頼の行き先から推測してはいけない: 途中で失敗した走行を「着いた」と
-    -- 見なし、違う階の地図で HOME へ戻ろうとして set_route_no が落ちる(2026-09-15)
     floor         INTEGER NOT NULL DEFAULT 2,
-    -- HOME へ戻る走行を始めたときの階。戻る計画は毎 tick 作り直すので、
-    -- 途中で floor が変わっても同じ計画が出るようにここで固定する
     homing_floor  INTEGER,
-    -- 人の手が要る理由。NULL なら不要。HOME へ戻れなかったときなどに入る。
-    -- 入っている間エンジンは新しい走行を始めない。設定画面の
-    -- 「ロボットを HOME に置き直した」(POST /api/robot/reset_home) で消える
     stuck_reason  TEXT,
-    -- 断片の中でいま動いているアクション(ブリッジの /state の action / step_index)。
-    -- 依頼の進行は断片単位で決めるので判断には使わない。断面図がロボットの位置を
-    -- 描くためだけに置く(エレベーターの前・中・後を区別する)
     action        TEXT,
     action_index  INTEGER,
+    -- そのアクションが始まった時刻(ブリッジの stamp、ISO8601)。断面図が区間の中の
+    -- 進みを「始まってからの経過」で出すために使う。画面を開き直しても位置がずれない
+    action_since  TEXT,
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
     step_total    INTEGER,
@@ -97,7 +89,6 @@ CREATE TABLE IF NOT EXISTS request (
     item          TEXT,
     receiver_name TEXT,                        -- 伝票の記載そのもの
     receiver_user_id INTEGER REFERENCES user(id),       -- 照合できたら埋まる
-    -- 走行の中身。delivery も collect も同じ形
     rack_id         INTEGER NOT NULL REFERENCES rack(id),
     from_area_id    INTEGER NOT NULL REFERENCES area(id),            -- 壁QRで読んだエリア
     from_address_id INTEGER NOT NULL REFERENCES street_address(id),  -- 荷台の位置から確定
@@ -111,9 +102,6 @@ CREATE TABLE IF NOT EXISTS request (
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
     started_at    TEXT,
-    -- 走行開始時にロボットが HOME にいたか。1 なら計画は init と移動から始まる。
-    -- 計画は毎 tick 作り直す(覚えない)ので、開始時の事実をここに残す。
-    -- collect は普通は荷降ろし直後(0)だが、E7 で満杯を解消する回収は HOME から出る(1)
     from_home     INTEGER NOT NULL DEFAULT 0 CHECK (from_home IN (0, 1)),
     delivered_at  TEXT,                          -- collect では「戻し終わった時刻」
     confirmed_at  TEXT,                          -- delivery だけ
@@ -197,12 +185,3 @@ INSERT OR IGNORE INTO rack (id, marker_id, street_address_id, is_empty) VALUES
 INSERT OR IGNORE INTO user (id, name) VALUES (1, '田中'), (2, '鈴木'), (3, '佐藤');
 
 INSERT OR IGNORE INTO robot (id, name, phase) VALUES (1, '宅配ロボット', 'idle');
-
-CREATE TABLE IF NOT EXISTS tasks (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  title      TEXT    NOT NULL,
-  done       INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks (created_at);
