@@ -187,7 +187,7 @@ export function SlipScan() {
       )}
 
       <button className="btn btn-ghost" style={{ marginTop: 14 }} onClick={() => back()}>
-        キャンセル(手入力で続ける)
+        キャンセル
       </button>
     </div>
   )
