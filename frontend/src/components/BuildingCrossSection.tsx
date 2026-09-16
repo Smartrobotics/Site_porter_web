@@ -171,6 +171,7 @@ export function BuildingCrossSection({
   const toY = goingUp ? TOP_Y : BOT_Y
   const shaftX = 251 // リフトの中央(シャフトは x=236〜266)
   const startX = 60 // 荷台の位置
+  const HOME_X = 36 // 出発階の HOME。荷台の少し手前。init はここから始まる
   const WAIT_X = 190 // 点1 / 点6: elv_wait
   const DOOR_X = 222 // 点2 / 点5: 扉の前
 
@@ -178,6 +179,7 @@ export function BuildingCrossSection({
 
   // 経路の折れ線と、その上の目印の距離
   const route = [
+    { x: HOME_X, y: fromY }, // HOME(出発階)
     { x: startX, y: fromY }, // 荷台(出発階)
     { x: WAIT_X, y: fromY }, // 点1
     { x: DOOR_X, y: fromY }, // 点2
@@ -193,10 +195,12 @@ export function BuildingCrossSection({
     cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y))
   }
   const TOTAL = cum[cum.length - 1]
-  // 目印: 点n の s は cum[n]。荷台のすぐ外(OUT)と到着階の荷台の手前(IN)
-  const S_RACK_FROM = 0
-  const S_OUT = MOVE_FORWARD_SHIFT
-  const S_WP = (n: WP) => cum[n]
+  // 目印: HOME → (init で少し出る) → 荷台 → (荷台から出る) → 点1 … 点5 → 荷台の手前 → 荷台
+  const S_HOME = 0
+  const S_INIT_OUT = cum[1] / 3 // init の move_forward_time で HOME から少し出た所
+  const S_RACK_FROM = cum[1]
+  const S_OUT = S_RACK_FROM + MOVE_FORWARD_SHIFT
+  const S_WP = (n: WP) => cum[n + 1]
   const S_IN = TOTAL - MOVE_FORWARD_SHIFT
   const S_RACK_TO = TOTAL
 
@@ -217,19 +221,17 @@ export function BuildingCrossSection({
   const isElv = fragmentKind === 'elv'
   const isCorridor = fragmentKind === 'move_to_target'
   const atRack = fragmentKind === 'init' || fragmentKind === 'pick_up' || fragmentKind === 'put_down'
+  // 動くアクション: start_navigation(廊下・HOME から荷台へ)、
+  // move_forward_time(HOME で少し出る・荷台の下から出る/入る)。ほかは止まっている
+  const moving =
+    ((isCorridor || fragmentKind === 'pick_up') && action === 'start_navigation') ||
+    (atRack && action === 'move_forward_time')
   const leg: Leg = isElv
     ? elvLeg(action, actionIndex)
     : {
         from: 1,
         to: 1,
-        // 廊下: start_navigation のときだけ動く。set_route_no は出発点で止まっている。
-        // 荷台の前: move_forward_time(荷台の下から出る/入る)のときだけ少し動く
-        seconds:
-          isCorridor && action === 'start_navigation'
-            ? CORRIDOR_SECONDS
-            : atRack && action === 'move_forward_time'
-              ? MOVE_FORWARD_SECONDS
-              : 0,
+        seconds: !moving ? 0 : action === 'move_forward_time' ? MOVE_FORWARD_SECONDS : CORRIDOR_SECONDS,
       }
   // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
@@ -243,9 +245,18 @@ export function BuildingCrossSection({
   if (fragmentKind && stepTotal) {
     switch (fragmentKind) {
       case 'init':
+        // HOME。move_forward_time で少しだけ前へ出る
+        s = robotOnToFloor ? S_RACK_TO : lerp(S_HOME, S_INIT_OUT, legT)
+        break
       case 'pick_up':
-        // 出発階の荷台。move_forward_time で荷台のすぐ外へ
-        s = robotOnToFloor ? S_RACK_TO : lerp(S_RACK_FROM, S_OUT, legT)
+        // start_navigation で HOME から荷台へ、move_forward_time で荷台の下から出る
+        s = robotOnToFloor
+          ? S_RACK_TO
+          : action === 'start_navigation'
+            ? lerp(S_INIT_OUT, S_RACK_FROM, legT)
+            : action === 'move_forward_time'
+              ? lerp(S_RACK_FROM, S_OUT, legT)
+              : S_INIT_OUT // 着く前(set_route_no)はまだ HOME 側。着いた後は「戻らない」で荷台に留まる
         break
       case 'move_to_target':
         s = robotOnToFloor
