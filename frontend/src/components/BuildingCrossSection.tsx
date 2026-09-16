@@ -73,6 +73,10 @@ const ELV_LEG_BY_INDEX: Leg[] = [
 
 /** 廊下の走行(move_to_target の start_navigation)の目安の所要時間(秒) */
 const CORRIDOR_SECONDS = 30
+/** 荷台の下から出る/入る move_forward_time。0.02 m/s で 41.65 s(move_forward_time.py) */
+const MOVE_FORWARD_SECONDS = 42
+/** そのときの見た目のずれ(px)。荷台の位置から廊下側へ少し出る */
+const MOVE_FORWARD_SHIFT = 14
 
 const LEG_CEILING = 0.92
 
@@ -166,10 +170,21 @@ export function BuildingCrossSection({
 
   const isElv = fragmentKind === 'elv'
   const isCorridor = fragmentKind === 'move_to_target'
+  const atRack = fragmentKind === 'init' || fragmentKind === 'pick_up' || fragmentKind === 'put_down'
   const leg: Leg = isElv
     ? elvLeg(action, actionIndex)
-    : // 廊下: start_navigation のときだけ動く。set_route_no は出発点で止まっている
-      { from: 1, to: 1, seconds: isCorridor && action === 'start_navigation' ? CORRIDOR_SECONDS : 0 }
+    : {
+        from: 1,
+        to: 1,
+        // 廊下: start_navigation のときだけ動く。set_route_no は出発点で止まっている。
+        // 荷台の前: move_forward_time(荷台の下から出る/入る)のときだけ少しずれる
+        seconds:
+          isCorridor && action === 'start_navigation'
+            ? CORRIDOR_SECONDS
+            : atRack && action === 'move_forward_time'
+              ? MOVE_FORWARD_SECONDS
+              : 0,
+      }
   // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
   const legT = useLegClock(legKey, leg.seconds)
@@ -204,9 +219,12 @@ export function BuildingCrossSection({
   if (fragmentKind && stepTotal) {
     switch (fragmentKind) {
       case 'init':
-      case 'pick_up':
-        pos = robotOnToFloor ? onToFloor(startX) : onFromFloor(startX)
+      case 'pick_up': {
+        // move_forward_time の間だけ荷台の位置から少し廊下側へ出る
+        const x = startX + MOVE_FORWARD_SHIFT * legT
+        pos = robotOnToFloor ? onToFloor(x) : onFromFloor(x)
         break
+      }
       case 'move_to_target':
         // 廊下。start_navigation の間だけ動き、それ以外は出発点に止まっている
         pos = robotOnToFloor
@@ -217,6 +235,8 @@ export function BuildingCrossSection({
         pos = leg.seconds > 0 ? between(wp(leg.from), wp(leg.to), legT) : wp(leg.from)
         break
       case 'put_down':
+        pos = onToFloor(startX + MOVE_FORWARD_SHIFT * legT)
+        break
       case 'return_home':
         pos = onToFloor(startX)
         break
