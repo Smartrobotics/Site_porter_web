@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import jsQR from 'jsqr'
 import { createArucoDetector, createStableVote } from '../lib/aruco'
 import { useStore } from '../domain/store'
-import { IconCart, IconScan } from '../components/icons'
+import { IconScan } from '../components/icons'
 
 type CamState = 'starting' | 'live' | 'denied' | 'unavailable'
 
@@ -34,7 +34,6 @@ export function Scan() {
   const rafRef = useRef<number>(0)
 
   const [cam, setCam] = useState<CamState>('starting')
-  const [manual, setManual] = useState('')
 
   /** 入力画面へ戻る。value があればマーカーID欄にそれを入れる */
   const back = (value?: string) => {
@@ -183,73 +182,17 @@ export function Scan() {
             {cam === 'denied' ? 'カメラを利用できません' : 'この環境ではカメラが使えません'}
           </div>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            下の手入力またはデモ用の荷台選択で続行できます
+            キャンセルで入力画面に戻り、マーカーIDを手入力してください
           </p>
         </div>
       )}
 
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      {/* 手入力フォールバック */}
-      <div className="section-label">IDを手入力</div>
-      <div className="card card-pad">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            className="input"
-            placeholder="例: 1"
-            value={manual}
-            onChange={(e) => setManual(e.target.value)}
-          />
-          <button
-            className="btn btn-blue btn-sm"
-            style={{ minWidth: 72 }}
-            disabled={!manual.trim()}
-            onClick={() => resolveMarker(manual)}
-          >
-            照合
-          </button>
-        </div>
-      </div>
-
       <button className="btn btn-ghost" style={{ marginTop: 14 }} onClick={() => back()}>
-        キャンセル(手入力で続ける)
+        キャンセル
       </button>
 
-      {/* デモ用: 荷台を直接選択 */}
-      <div className="section-label">デモ用: 荷台を選択</div>
-      <div className="stack-sm">
-        {racks.map((c) => (
-          <button
-            key={c.id}
-            className="card card-pad row-between"
-            style={{ width: '100%', textAlign: 'left' }}
-            onClick={() => resolveMarker(String(c.markerId))}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 11,
-                  background: 'var(--blue-tint)',
-                  color: 'var(--blue-dark)',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <IconCart />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700 }}>{c.label}</div>
-                <div className="muted mono" style={{ fontSize: 12 }}>
-                  {c.markerId}
-                </div>
-              </div>
-            </div>
-            <span className="badge-pill badge-blue">選択</span>
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
