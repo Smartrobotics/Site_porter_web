@@ -5,6 +5,7 @@ import { Header } from './components/Header'
 import { TabNav } from './components/TabNav'
 import { ToastHost } from './components/ToastHost'
 import { ScreenErrorModal } from './components/ScreenErrorModal'
+import { ArrivalModal } from './components/ArrivalModal'
 import { Home } from './screens/Home'
 import { Entry } from './screens/Entry'
 import { Scan } from './screens/Scan'
@@ -35,6 +36,7 @@ function Layout() {
       <Header />
       <ToastHost />
       <ScreenErrorModal />
+      <ArrivalModal />
       <ScrollToTop />
       <main className="app-main">
         <Routes>

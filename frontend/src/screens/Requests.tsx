@@ -48,7 +48,7 @@ function place(master: Master, areaId: number, addressId?: number): string {
 export function Requests() {
   useScreenData()
   const navigate = useNavigate()
-  const { tasks, master } = useStore()
+  const { tasks, master, setViewerUser } = useStore()
   const [params] = useSearchParams()
   const [recipient, setRecipient] = useState(params.get('user') ?? '')
 
@@ -57,7 +57,11 @@ export function Requests() {
   useEffect(() => {
     if (!userId || recipient) return
     const u = master.users.find((x) => String(x.id) === userId)
-    if (u) setRecipient(u.name)
+    if (u) {
+      setRecipient(u.name)
+      // 個人リンクで開いた = この端末はこの受取人のもの。到着の知らせをこの人宛に絞る
+      setViewerUser(u.id)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, master.users])
 

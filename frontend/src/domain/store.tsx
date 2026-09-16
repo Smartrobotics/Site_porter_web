@@ -87,6 +87,13 @@ interface PersistState {
   demoError: DemoError
   /** デモ用。true の間はポーリングが失敗し続ける(E10 の再現) */
   demoOffline: boolean
+  /**
+   * この端末を使っている受取人の user.id。個人リンク(?user_id=N)で開いたときに入る。
+   * 到着の知らせをこの人宛だけに絞る。無ければ全員分(配送員の端末)
+   */
+  viewerUserId?: number
+  /** 到着の知らせをもう見せた依頼の id。同じ依頼で二度出さない */
+  announcedIds: number[]
 }
 
 /**
@@ -115,6 +122,8 @@ const initialState: PersistState = {
   currentAreaId: undefined,
   demoError: 'none',
   demoOffline: false,
+  viewerUserId: undefined,
+  announcedIds: [],
 }
 
 function loadState(): PersistState {
@@ -131,11 +140,20 @@ type Action =
   | { type: 'SET_CURRENT_AREA'; areaId?: number }
   | { type: 'SET_DEMO_ERROR'; value: DemoError }
   | { type: 'SET_DEMO_OFFLINE'; value: boolean }
+  | { type: 'SET_VIEWER_USER'; userId?: number }
+  | { type: 'MARK_ANNOUNCED'; ids: number[] }
 
 function reducer(state: PersistState, action: Action): PersistState {
   switch (action.type) {
     case 'SET_CURRENT_AREA':
       return { ...state, currentAreaId: action.areaId }
+    case 'SET_VIEWER_USER':
+      return { ...state, viewerUserId: action.userId }
+    case 'MARK_ANNOUNCED': {
+      // 増え続けないよう直近 200 件だけ残す
+      const merged = Array.from(new Set([...state.announcedIds, ...action.ids]))
+      return { ...state, announcedIds: merged.slice(-200) }
+    }
     case 'SET_DEMO_ERROR':
       return { ...state, demoError: action.value }
     case 'SET_DEMO_OFFLINE':
@@ -176,6 +194,11 @@ interface StoreContextValue extends PersistState {
   pendingReceiptCount: number
   // actions
   setCurrentArea: (areaId?: number) => void
+  /** 個人リンクで開いた受取人を覚える */
+  setViewerUser: (userId?: number) => void
+  /** 届いたばかりで、まだこの端末で知らせていない荷物。モーダルに出す */
+  arrival: TransportTask | null
+  dismissArrival: () => void
   /** 荷台のマーカーIDを付け替える */
   setRackMarker: (rackId: number, markerId: number) => Promise<void>
   /** 荷台配置をまとめて反映する。1台ずつだと入れ替えが途中で衝突する */
@@ -365,6 +388,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [raws, master],
   )
 
+  // 到着の知らせ。ポーリングで「届いた・未確認」になった依頼のうち、
+  // この端末でまだ知らせていないものを1件モーダルに出す(通知タブへ行かなくても気付ける)。
+  // 受取人の端末(viewerUserId あり)には自分宛だけ、配送員の端末には全部
+  const [arrival, setArrival] = useState<TransportTask | null>(null)
+  useEffect(() => {
+    if (arrival) return
+    const viewer = state.viewerUserId !== undefined ? master.users.find((u) => u.id === state.viewerUserId) : undefined
+    const fresh = tasks
+      .filter((t) => !t.isDeleted && t.kind !== 'collect' && t.phase === 'completed' && !t.confirmedAt)
+      .filter((t) => !state.announcedIds.includes(t.id))
+      .filter((t) => !viewer || t.recipient === viewer.name)
+      .sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt))
+    if (fresh.length > 0) setArrival(fresh[0])
+  }, [tasks, master.users, state.viewerUserId, state.announcedIds, arrival])
+  const dismissArrival = () => {
+    if (arrival) dispatch({ type: 'MARK_ANNOUNCED', ids: [arrival.id] })
+    setArrival(null)
+  }
+
   const startTransport = async (req: TransportRequest): Promise<number> => {
     // E6 / E8 はデモ用。サーバーまで行かせずにモーダルを出す
     if (state.demoError !== 'none') {
@@ -463,6 +505,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toasts,
     pendingReceiptCount,
     setCurrentArea: (areaId) => dispatch({ type: 'SET_CURRENT_AREA', areaId }),
+    setViewerUser: (userId) => dispatch({ type: 'SET_VIEWER_USER', userId }),
+    arrival,
+    dismissArrival,
     setRackMarker: async (rackId, markerId) => {
       const res = await fetchWithTimeout(`/api/rack/${rackId}`, {
         method: 'PATCH',
