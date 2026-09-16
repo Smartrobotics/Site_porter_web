@@ -129,3 +129,5 @@ class RobotOut(BaseModel):
     floor: int | None = None
     # 人の手が要る理由。None なら不要。HOME へ戻れなかったときなどに入る
     stuck_reason: str | None = None
+    # サーバーの現在時刻(ISO8601)。画面が時計の差を取るため
+    server_now: str | None = None

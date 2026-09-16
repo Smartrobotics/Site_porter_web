@@ -56,6 +56,7 @@ interface RobotRaw {
   mode: string
   floor: number | null
   stuck_reason: string | null
+  server_now: string | null
 }
 
 const ROBOT_PHASE_LABEL: Record<string, string> = {
@@ -157,6 +158,11 @@ interface StoreContextValue extends PersistState {
   tasks: TransportTask[]
   /** ロボットの現在の様子。取得できていなければ null */
   robot: RobotState | null
+  /**
+   * 端末の時計 − サーバーの時計(ms)。サーバーから来る時刻(ロボットの stamp など)を
+   * 端末の時計に直すときに足す。ロボット本体には NTP が無く何分もずれることがある
+   */
+  clockOffsetMs: number
   /** 現在地のエリア(未設定/未登録なら undefined。E1-2 / E1-3) */
   currentArea: Area | undefined
   toasts: Toast[]
@@ -211,6 +217,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadState)
   const [master, setMaster] = useState<Master>(EMPTY_MASTER)
   const [masterLoaded, setMasterLoaded] = useState(false)
+  const [clockOffsetMs, setClockOffsetMs] = useState(0)
   const [raws, setRaws] = useState<RequestRaw[]>([])
   const [robot, setRobot] = useState<RobotState | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -255,6 +262,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ])
       setRaws(requests)
       setMaster((m) => ({ ...m, racks: racks.map(toRack) }))
+      if (rb.server_now) {
+        const serverNow = Date.parse(rb.server_now)
+        if (!Number.isNaN(serverNow)) setClockOffsetMs(Date.now() - serverNow)
+      }
       setRobot({
         id: rb.id,
         name: rb.name,
@@ -422,6 +433,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     racks: master.racks,
     users: master.users,
     masterLoaded,
+    clockOffsetMs,
     tasks,
     robot,
     currentArea,

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 import logging
 import os
 import sqlite3
@@ -556,7 +557,10 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="ロボットが登録されていません")
-    return {**dict(row), "mode": ROBOT_MODE}
+    # サーバーの現在時刻。画面はこれと自分の時計の差を取り、ロボットの stamp を
+    # 自分の時計に直してから経過時間を出す。ロボット本体の時計は NTP が無く
+    # 実時刻から何分もずれることがある(2026-09-16: +12.5 分)
+    return {**dict(row), "mode": ROBOT_MODE, "server_now": datetime.now(timezone.utc).isoformat()}
 
 
 @app.post("/api/robot/reset_home", response_model=RobotOut)

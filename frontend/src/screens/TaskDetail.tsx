@@ -15,7 +15,7 @@ export function TaskDetail() {
   useScreenData()
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tasks, master } = useStore()
+  const { tasks, master, clockOffsetMs } = useStore()
 
   const task = tasks.find((t) => t.id === Number(id))
 
@@ -156,7 +156,7 @@ export function TaskDetail() {
           robotFloor={task.robotFloor}
           action={task.action}
           actionIndex={task.actionIndex}
-          actionSince={task.actionSince}
+          actionSince={task.actionSince !== undefined ? task.actionSince + clockOffsetMs : undefined}
         />
       </div>
 
