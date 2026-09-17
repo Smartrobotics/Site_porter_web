@@ -819,8 +819,12 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
 
     # 投げた断片をブリッジが覚えていない = 届いていないか、ブリッジが再起動した。
     # 終了状態は次のシナリオまで残る仕様なので、IDLE なのに待っている断片がある、
-    # という形は「失われた」しか意味しない。再送は duplicate で守られていて安全
-    if restarted or (status == "IDLE" and expected):
+    # という形は「失われた」しか意味しない。
+    # ただし state がすでにその断片の名前を出している(RUNNING でも終了でも)なら
+    # 届いている。ブリッジだけが再起動した場合がこれで、再送してはいけない:
+    # 2026-09-17 にブリッジを再起動するたびに再送し、エンジンのキューに
+    # 同じ断片が積まれて pick_up が4回走った
+    if name != expected and (restarted or status == "IDLE"):
         log.warning(
             "投げた断片が失われています(%s)。再送します name=%s",
             "ブリッジ再起動" if restarted else "ブリッジが IDLE",
