@@ -137,6 +137,8 @@ def _stuck(conn: sqlite3.Connection, reason: str) -> None:
 
 # stuck の警告を毎秒出さないための時刻
 _stuck_logged_at = 0.0
+# ROS/エンジン停止の警告を毎秒出さないための時刻
+_ros_down_logged_at = 0.0
 
 
 def _go_idle(conn: sqlite3.Connection) -> None:
@@ -773,8 +775,12 @@ def _poll_bridge(conn: sqlite3.Connection) -> dict | None:
     _poll_fails = 0
 
     if not state.get("ros_ok", False):
-        # ブリッジは生きていて ROS だけ落ちている。状態の値は古いので信用しない
-        log.error("ブリッジは応答していますが ROS が落ちています")
+        # ブリッジは生きていて ROS(かエンジン)だけ落ちている。状態の値は古いので信用しない。
+        # 毎秒同じ行を出さない: 落ちている間は1分に1回
+        global _ros_down_logged_at
+        if time.time() - _ros_down_logged_at > 60:
+            _ros_down_logged_at = time.time()
+            log.error("ブリッジは応答していますが ROS かエンジンが落ちています(復旧するまで待ちます)")
         conn.execute("UPDATE robot SET phase = 'error' WHERE id = ?", (ROBOT_ID,))
         return None
 
