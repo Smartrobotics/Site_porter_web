@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS robot (
     -- そのアクションが始まった時刻(ブリッジの stamp、ISO8601)。断面図が区間の中の
     -- 進みを「始まってからの経過」で出すために使う。画面を開き直しても位置がずれない
     action_since  TEXT,
+    -- 走行中の一時停止の理由(エンジンの reason。"emergency stop" など)。通常は NULL。
+    -- Atmobi は非常停止の解除後に自分で走り出すので、依頼は running のまま
+    pause_reason  TEXT,
     scenario_name TEXT,                          -- 走行中の断片 run_<id>_<NN>_<kind>
     step_index    INTEGER,                       -- その断片の中での位置
     step_total    INTEGER,

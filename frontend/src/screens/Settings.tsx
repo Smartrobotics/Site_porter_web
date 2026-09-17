@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import { robotPhaseLabel, useStore } from '../domain/store'
 import { floorLabel, SITE_NAME, type Area, type Master, type Rack } from '../domain/master'
 import { IconCart, IconAlert, IconQr, IconClose, IconPin } from '../components/icons'
+import { PauseBanner } from '../components/PauseBanner'
 
 /**
  * 壁QRのエントリーURL(スマホ標準カメラで読む → ブラウザで現在地確定)。
@@ -216,6 +217,7 @@ export function Settings() {
                 </span>
               </div>
             ))}
+            <PauseBanner reason={robot.pauseReason} style={{ marginTop: 10, background: 'var(--grey-tint)' }} />
             {robot.stuckReason && (
               <div
                 className="card card-pad"

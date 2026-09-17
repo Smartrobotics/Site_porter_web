@@ -44,6 +44,8 @@ export interface RobotState {
   floor: number | null
   /** 人の手が要る理由。null なら不要。入っている間サーバーは新しい走行を始めない */
   stuckReason: string | null
+  /** 走行中の一時停止の理由。"emergency stop" = 非常停止中。通常は null */
+  pauseReason: string | null
 }
 
 interface RobotRaw {
@@ -57,6 +59,7 @@ interface RobotRaw {
   mode: string
   floor: number | null
   stuck_reason: string | null
+  pause_reason: string | null
   server_now: string | null
 }
 
@@ -323,6 +326,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mode: rb.mode,
         floor: rb.floor ?? null,
         stuckReason: rb.stuck_reason ?? null,
+        pauseReason: rb.pause_reason ?? null,
       })
       setLastFetchedAt(Date.now())
     } catch {

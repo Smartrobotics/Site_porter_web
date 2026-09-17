@@ -42,6 +42,8 @@ export interface RequestRaw {
   robot_action_index: number | null
   /** そのアクションの開始時刻(ISO8601、+09:00 付き) */
   robot_action_since: string | null
+  /** 走行中の一時停止の理由。"emergency stop" = 非常停止中。通常は null */
+  robot_pause_reason: string | null
   step_index: number | null
   step_total: number | null
 }
@@ -163,6 +165,7 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
             return Number.isNaN(ms) ? undefined : ms
           })()
         : undefined,
+    pauseReason: r.status === 'running' ? (r.robot_pause_reason ?? undefined) : undefined,
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

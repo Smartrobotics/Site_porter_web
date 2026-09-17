@@ -45,6 +45,8 @@ class RequestOut(BaseModel):
     robot_action: str | None = None
     robot_action_index: int | None = None
     robot_action_since: str | None = None
+    # 走行中の一時停止の理由("emergency stop")。通常は None。走行中の依頼だけ
+    robot_pause_reason: str | None = None
     step_index: int | None
     step_total: int | None
 
@@ -129,5 +131,7 @@ class RobotOut(BaseModel):
     floor: int | None = None
     # 人の手が要る理由。None なら不要。HOME へ戻れなかったときなどに入る
     stuck_reason: str | None = None
+    # 走行中の一時停止の理由。"emergency stop" = 非常停止中(バンパー等)。通常は None
+    pause_reason: str | None = None
     # サーバーの現在時刻(ISO8601)。画面が時計の差を取るため
     server_now: str | None = None

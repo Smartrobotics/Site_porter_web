@@ -8,6 +8,7 @@ import { PhaseBadge, ProgressBar, PriorityBadge } from '../components/ui'
 import { BuildingCrossSection } from '../components/BuildingCrossSection'
 import { timelineSteps, phaseIndex } from '../domain/phase'
 import { IconCheck, IconAlert, IconArrow } from '../components/icons'
+import { PauseBanner } from '../components/PauseBanner'
 import { formatTime } from '../lib/format'
 import { useSmoothProgress } from '../lib/useSmoothProgress'
 
@@ -105,6 +106,9 @@ export function TaskDetail() {
           </div>
         </div>
       )}
+
+      {/* 走行中の一時停止(非常停止など)。ロボットは止まっているが依頼は続いている */}
+      {isActive && <PauseBanner reason={task.pauseReason} style={{ marginBottom: 16 }} />}
 
       {/* 建物断面イラスト */}
       <div className="card" style={{ padding: '12px 8px 0' }}>

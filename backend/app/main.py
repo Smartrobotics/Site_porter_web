@@ -85,7 +85,7 @@ REQUEST_COLUMNS = """
        fa.label AS from_area, ta.label AS to_area, rk.marker_id AS rack_marker_id,
        rb.phase AS robot_phase, rb.scenario_name AS robot_scenario, rb.floor AS robot_floor,
        rb.action AS robot_action, rb.action_index AS robot_action_index,
-       rb.action_since AS robot_action_since,
+       rb.action_since AS robot_action_since, rb.pause_reason AS robot_pause_reason,
        rb.step_index, rb.step_total
 """
 
@@ -549,7 +549,7 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     """
     row = db.execute(
         """SELECT rb.id, rb.name, rb.phase, rb.scenario_name,
-                  rb.step_index, rb.step_total, rb.floor, rb.stuck_reason,
+                  rb.step_index, rb.step_total, rb.floor, rb.stuck_reason, rb.pause_reason,
                   (SELECT r.id FROM request r
                    WHERE r.assigned_robot_id = rb.id AND r.status = 'running'
                      AND r.is_deleted = 0 LIMIT 1) AS request_id

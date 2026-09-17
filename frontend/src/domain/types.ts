@@ -69,6 +69,8 @@ export interface TransportTask extends TransportRequest {
   actionIndex?: number
   /** そのアクションが始まった時刻(ms)。区間の中の進みはここからの経過で出す */
   actionSince?: number
+  /** 走行中の一時停止の理由(エンジンの reason)。"emergency stop" = 非常停止中。通常は undefined */
+  pauseReason?: string
   rawState?: number
   statusMessage: string
   robotTaskId?: string

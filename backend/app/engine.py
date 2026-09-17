@@ -129,7 +129,8 @@ def _stuck(conn: sqlite3.Connection, reason: str) -> None:
     log.error("%s。ロボットを HOME に置き直し、設定画面の「HOME に置き直した」を押してください", reason)
     conn.execute(
         """UPDATE robot SET phase = 'error', stuck_reason = ?, homing_floor = NULL,
-                            scenario_name = NULL, step_index = NULL, step_total = NULL
+                            scenario_name = NULL, step_index = NULL, step_total = NULL,
+                            pause_reason = NULL
            WHERE id = ?""",
         (reason, ROBOT_ID),
     )
@@ -143,12 +144,15 @@ _ros_down_logged_at = 0.0
 _ros_down_count = 0
 # 実行中の断片が失われた(エンジン停止・再起動)と判断するまでの連続回数
 ROS_DOWN_FAIL_LIMIT = 3
+# エンジンが非常停止を報告するときの文字列(scenario_control の EmgStopWatch)。
+# RUNNING の reason にはこのまま、失敗の reason には "... failed: emergency stop held for Ns" で入る
+EMERGENCY_STOP_MARK = "emergency stop"
 
 
 def _go_idle(conn: sqlite3.Connection) -> None:
     conn.execute(
         """UPDATE robot SET phase = 'idle', scenario_name = NULL,
-                            step_index = NULL, step_total = NULL
+                            step_index = NULL, step_total = NULL, pause_reason = NULL
            WHERE id = ?""",
         (ROBOT_ID,),
     )
@@ -879,16 +883,35 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
             else:
                 _send_fragment(conn, req, index + 1)
             return
-        _fail(conn, req, state.get("reason") or status)
+        reason = state.get("reason") or status
+        _fail(conn, req, reason)
+        if EMERGENCY_STOP_MARK in reason:
+            # 非常停止が解除されないまま上限を超えた。ロボットは通路の途中に
+            # 止まっていて自己位置も荷台も分からないので、人が見るまで動かさない
+            _stuck(
+                conn,
+                "非常停止が続いたため走行を止めました(バンパーか非常停止ボタン)。"
+                "解除してロボットを HOME に置き直してください",
+            )
         return
 
     if status == "RUNNING" and name == expected:
         # 断片の中のステップ。依頼の進行は断片単位なので判断には使わないが、
         # 断面図がロボットの位置(リフトの前・中・後)を描くために残す
         # stamp はエンジンがこのステップを publish した時刻 = アクションの開始時刻
+        # reason は RUNNING では一時停止の補足("emergency stop")。空なら通常走行。
+        # 画面はこれで「非常停止中」を出す。走行自体は Atmobi が解除後に自分で再開する
+        pause = state.get("reason") or None
+        if pause != robot["pause_reason"]:
+            if pause:
+                log.warning("ロボットが一時停止しています 断片=%s 理由=%s", name, pause)
+            else:
+                log.info("ロボットの一時停止が解けました 断片=%s", name)
         conn.execute(
-            "UPDATE robot SET action = ?, action_index = ?, action_since = ? WHERE id = ?",
-            (state.get("action") or None, state.get("step_index"), state.get("stamp"), ROBOT_ID),
+            """UPDATE robot SET action = ?, action_index = ?, action_since = ?, pause_reason = ?
+               WHERE id = ?""",
+            (state.get("action") or None, state.get("step_index"), state.get("stamp"), pause,
+             ROBOT_ID),
         )
         log.debug(
             "断片 %s step %s/%s %s",
