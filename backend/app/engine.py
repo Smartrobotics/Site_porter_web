@@ -139,6 +139,10 @@ def _stuck(conn: sqlite3.Connection, reason: str) -> None:
 _stuck_logged_at = 0.0
 # ROS/エンジン停止の警告を毎秒出さないための時刻
 _ros_down_logged_at = 0.0
+# ros_ok=false が続いた回数。断片の実行中にこの回数に達したら、その走行は失敗にする
+_ros_down_count = 0
+# 実行中の断片が失われた(エンジン停止・再起動)と判断するまでの連続回数
+ROS_DOWN_FAIL_LIMIT = 3
 
 
 def _go_idle(conn: sqlite3.Connection) -> None:
@@ -602,13 +606,16 @@ def _advance_homing(conn: sqlite3.Connection) -> None:
 
     state = _poll_bridge(conn)
     if state is None:
+        if _ros_down_count >= ROS_DOWN_FAIL_LIMIT:
+            _stuck(conn, "HOME へ戻る途中でエンジンが止まりました。ロボットの位置を確認してください")
         return
     status = state.get("status", "IDLE")
     name = state.get("scenario_name", "")
     expected = robot["scenario_name"]
 
     if status == "IDLE" and expected:
-        _post_fragment(expected)
+        # エンジンが再起動した。断片は最初から走り直すことになるので投げ直さない
+        _stuck(conn, "HOME へ戻る途中でエンジンが再起動しました。ロボットの位置を確認してください")
         return
     if status in TERMINAL:
         if name != expected:
@@ -774,17 +781,33 @@ def _poll_bridge(conn: sqlite3.Connection) -> dict | None:
 
     _poll_fails = 0
 
+    global _ros_down_count
     if not state.get("ros_ok", False):
         # ブリッジは生きていて ROS(かエンジン)だけ落ちている。状態の値は古いので信用しない。
         # 毎秒同じ行を出さない: 落ちている間は1分に1回
         global _ros_down_logged_at
+        _ros_down_count += 1
         if time.time() - _ros_down_logged_at > 60:
             _ros_down_logged_at = time.time()
             log.error("ブリッジは応答していますが ROS かエンジンが落ちています(復旧するまで待ちます)")
         conn.execute("UPDATE robot SET phase = 'error' WHERE id = ?", (ROBOT_ID,))
         return None
 
+    _ros_down_count = 0
     return state
+
+
+def _fragment_lost(conn: sqlite3.Connection, req: sqlite3.Row, why: str) -> None:
+    """
+    実行中の断片が失われた(エンジンが落ちた・再起動した)。
+    以前はここで断片を投げ直していたが、断片は最初のステップから走り直すため
+    init なら誤った自己位置の宣言、elv ならエレベーターの再呼び出しになる。
+    危険なので走行を失敗にし、人が確認するまで次を始めない(2026-09-17 の判断)。
+    """
+    robot = conn.execute("SELECT scenario_name FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
+    log.error("実行中の断片が失われました id=%s 断片=%s: %s", req["id"], robot["scenario_name"] if robot else "", why)
+    _fail(conn, req, f"エンジン停止: {why}")
+    _stuck(conn, f"走行中にエンジンが止まりました({why})。ロボットの位置と荷台を確認してください")
 
 
 def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
@@ -800,7 +823,10 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
 
     state = _poll_bridge(conn)
     if state is None:
-        # 依頼は running のまま保持する。復旧したら続きから進む
+        # ブリッジ自体が落ちている(§4.4 B)なら依頼は running のまま保持し、復旧を待つ。
+        # ブリッジは生きていて ROS/エンジンが落ちているのが続くなら、断片は失われている
+        if _ros_down_count >= ROS_DOWN_FAIL_LIMIT:
+            _fragment_lost(conn, req, "ROS かエンジンが応答しない")
         return
 
     if robot["phase"] == "error":
@@ -830,12 +856,14 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
     # 届いている。ブリッジだけが再起動した場合がこれで、再送してはいけない:
     # 2026-09-17 にブリッジを再起動するたびに再送し、エンジンのキューに
     # 同じ断片が積まれて pick_up が4回走った
-    if name != expected and (restarted or status == "IDLE"):
-        log.warning(
-            "投げた断片が失われています(%s)。再送します name=%s",
-            "ブリッジ再起動" if restarted else "ブリッジが IDLE",
-            expected,
-        )
+    if status == "IDLE" and expected:
+        # IDLE は起動直後にしか出ない = エンジンが再起動して断片を忘れた。投げ直さない
+        _fragment_lost(conn, req, "エンジンが再起動した")
+        return
+    if name != expected and restarted and status in TERMINAL:
+        # ブリッジだけが再起動し、エンジンは前の断片を終えて待っている。
+        # 届いていなかった断片を送り直す(届いていれば duplicate で弾かれる)
+        log.warning("ブリッジが再起動し、断片 %s が届いていません。再送します", expected)
         _send_fragment(conn, req, index)
         return
 
