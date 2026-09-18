@@ -15,6 +15,13 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     # 行をカラム名で引けるようにする（row["title"] や dict(row) が使える）
     conn.row_factory = sqlite3.Row
+    # 書き込み中(エンジンの tick は毎秒書く)に別の接続が触ったとき、すぐ
+    # "database is locked" にせず最大 5000 ms 待って再試行する
+    conn.execute("PRAGMA busy_timeout = 5000")
+    # WAL: 書き込み中でも他の接続の読み込みを止めない(API の GET がエンジンの
+    # 書き込みに待たされない)。DB ファイルに永続する設定で、app.db-wal / app.db-shm が
+    # 同じディレクトリにできる。ローカルディスク前提(ネットワーク FS では使わない)
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
