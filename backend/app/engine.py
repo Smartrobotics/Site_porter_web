@@ -312,13 +312,15 @@ def _run(conn: sqlite3.Connection, row: sqlite3.Row, to_address_id: int) -> None
     fresh = conn.execute("SELECT * FROM request WHERE id = ?", (row["id"],)).fetchone()
     plan = _plan_for(conn, fresh)
     if plan is None:
-        _fail(conn, fresh, "走行の計画を作れませんでした（番地かマーカーが未設定）")
+        _fail(conn, fresh, "走行の計画を作れませんでした（番地かマーカーが未設定）", moved=False)
+        _set_at_home(conn, 1)   # 走り出していない
         return
     try:
         names = generate_chain(plan, run_id=fresh["id"], scenario_dir=SCENARIO_DIR)
         log.info("断片を %s 件書きました dir=%s", len(names), SCENARIO_DIR)
     except OSError as e:
-        _fail(conn, fresh, f"断片を書けませんでした: {e}")
+        _fail(conn, fresh, f"断片を書けませんでした: {e}", moved=False)
+        _set_at_home(conn, 1)   # 走り出していない
         return
 
     row = fresh
@@ -665,7 +667,18 @@ def _advance_mock(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
 #                       （断片が終わったかどうかだけが依頼の進行に関係する）
 
 
-def _fail(conn: sqlite3.Connection, req: sqlite3.Row, reason: str) -> None:
+def _fail(conn: sqlite3.Connection, req: sqlite3.Row, reason: str,
+          stuck_reason: str | None = None, moved: bool = True) -> None:
+    """
+    走行を失敗にする。
+
+    moved(既定)なら、ロボットは HOME を離れた後のどこかで止まっている。
+    どこに居て荷台がどうなっているかサーバーには分からないので、次の走行は
+    始めず、人が HOME に置き直して申告するまで待つ(2026-09-18 の判断:
+    走行中の失敗は種類を問わずすべて人の手待ちにする。それまでは軽い失敗なら
+    次の依頼へ進んでいたが、位置も荷台も不明なまま走り続けるのは危ない)。
+    moved=False は走り出す前の失敗(計画が組めない等)。ロボットは HOME のまま
+    """
     conn.execute(
         """UPDATE request SET status = 'failed', cancelled_at = datetime('now')
            WHERE id = ?""",
@@ -674,6 +687,9 @@ def _fail(conn: sqlite3.Connection, req: sqlite3.Row, reason: str) -> None:
     _go_idle(conn)
     # 荷台はロボットの下（番地なし）。次のtickで _rescue_stranded_racks が置き直す
     log.error("搬送が失敗しました id=%s reason=%s", req["id"], reason)
+    if moved:
+        _stuck(conn, stuck_reason or
+               f"走行中にエラーが発生しました({reason})。ロボットの位置と荷台を確認してください")
 
 
 def _send_fragment(conn: sqlite3.Connection, req: sqlite3.Row, index: int) -> None:
@@ -830,8 +846,8 @@ def _fragment_lost(conn: sqlite3.Connection, req: sqlite3.Row, why: str) -> None
     """
     robot = conn.execute("SELECT scenario_name FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
     log.error("実行中の断片が失われました id=%s 断片=%s: %s", req["id"], robot["scenario_name"] if robot else "", why)
-    _fail(conn, req, f"エンジン停止: {why}")
-    _stuck(conn, f"走行中にロボットとの通信が途切れました({why})。ロボットの位置と荷台を確認してください")
+    _fail(conn, req, f"エンジン停止: {why}",
+          stuck_reason=f"走行中にロボットとの通信が途切れました({why})。ロボットの位置と荷台を確認してください")
 
 
 def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
@@ -908,15 +924,12 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
                 _send_fragment(conn, req, index + 1)
             return
         reason = state.get("reason") or status
-        _fail(conn, req, reason)
+        stuck_reason = None
         if EMERGENCY_STOP_MARK in reason:
-            # 非常停止が解除されないまま上限を超えた。ロボットは通路の途中に
-            # 止まっていて自己位置も荷台も分からないので、人が見るまで動かさない
-            _stuck(
-                conn,
-                "非常停止が続いたため走行を止めました(バンパーか非常停止ボタン)。"
-                "解除してロボットを HOME に置き直してください",
-            )
+            # 非常停止が解除されないまま上限を超えた
+            stuck_reason = ("非常停止が続いたため走行を止めました(バンパーか非常停止ボタン)。"
+                            "解除してロボットを HOME に置き直してください")
+        _fail(conn, req, reason, stuck_reason=stuck_reason)
         return
 
     if status == "RUNNING" and name == expected:
