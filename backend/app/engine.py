@@ -42,6 +42,10 @@ ROBOT_URL = os.getenv("ROBOT_URL", "http://127.0.0.1:8080")
 
 # GET /state の連続失敗がこの回数に達したらロボットをオフライン扱いにする（§4.4 B）
 POLL_FAIL_LIMIT = 3
+# ブリッジが応答しないまま走行中の断片を待つ上限(秒)。短い断は待てば戻るが、
+# これを超えたらロボットはどこかで断片を走り終えて止まっているはずなので、
+# 走行を失敗にして人が確認するまで動かさない(2026-09-18 の判断)
+BRIDGE_DOWN_FAIL_SECONDS = int(os.getenv("BRIDGE_DOWN_FAIL_SECONDS", "120"))
 
 # 走行1件の上限時間。超えたら POST /cancel して失敗にする（§4.4 C）。
 # 断片ごとに分けず走行全体で見る。そのほうが request.started_at だけで足り、
@@ -81,6 +85,8 @@ _ticks_in_step = 0
 # GET /state の連続失敗回数。3秒ぶんの履歴なのでメモリに置く。
 # 失われても次のtickで数え直すだけなので、スキーマには入れない
 _poll_fails = 0
+# ブリッジが応答しなくなった最初の時刻。0 なら応答している
+_bridge_down_since = 0.0
 
 # 前回見た uptime_sec。巻き戻ったらブリッジが再起動している(§3.2 の uptime_sec)
 _last_uptime = 0
@@ -612,6 +618,8 @@ def _advance_homing(conn: sqlite3.Connection) -> None:
     if state is None:
         if _ros_down_count >= ROS_DOWN_FAIL_LIMIT:
             _stuck(conn, "HOME へ戻る途中でエンジンが止まりました。ロボットの位置を確認してください")
+        elif _bridge_down_too_long():
+            _stuck(conn, "HOME へ戻る途中でブリッジが応答しなくなりました。ロボットの位置を確認してください")
         return
     status = state.get("status", "IDLE")
     name = state.get("scenario_name", "")
@@ -767,11 +775,13 @@ def _poll_bridge(conn: sqlite3.Connection) -> dict | None:
     オフライン判定はここに集約する。走行の продвижение だけでなく、
     走行を始める前にも通す — ロボットが死んでいるのに依頼を消費しないため。
     """
-    global _poll_fails
+    global _poll_fails, _bridge_down_since
     try:
         state = bridge.get_state(ROBOT_URL)
     except bridge.BridgeDown as e:
         _poll_fails += 1
+        if not _bridge_down_since:
+            _bridge_down_since = time.time()
         if _poll_fails == POLL_FAIL_LIMIT:
             log.error(
                 "ブリッジが %s 回続けて応答しません。オフライン扱いにします: %s",
@@ -784,6 +794,7 @@ def _poll_bridge(conn: sqlite3.Connection) -> dict | None:
         return None
 
     _poll_fails = 0
+    _bridge_down_since = 0.0
 
     global _ros_down_count
     if not state.get("ros_ok", False):
@@ -801,6 +812,15 @@ def _poll_bridge(conn: sqlite3.Connection) -> dict | None:
     return state
 
 
+def _bridge_down_for() -> float:
+    """ブリッジが応答しなくなってからの秒数。応答していれば 0"""
+    return time.time() - _bridge_down_since if _bridge_down_since else 0.0
+
+
+def _bridge_down_too_long() -> bool:
+    return _bridge_down_for() >= BRIDGE_DOWN_FAIL_SECONDS
+
+
 def _fragment_lost(conn: sqlite3.Connection, req: sqlite3.Row, why: str) -> None:
     """
     実行中の断片が失われた(エンジンが落ちた・再起動した)。
@@ -811,7 +831,7 @@ def _fragment_lost(conn: sqlite3.Connection, req: sqlite3.Row, why: str) -> None
     robot = conn.execute("SELECT scenario_name FROM robot WHERE id = ?", (ROBOT_ID,)).fetchone()
     log.error("実行中の断片が失われました id=%s 断片=%s: %s", req["id"], robot["scenario_name"] if robot else "", why)
     _fail(conn, req, f"エンジン停止: {why}")
-    _stuck(conn, f"走行中にエンジンが止まりました({why})。ロボットの位置と荷台を確認してください")
+    _stuck(conn, f"走行中にロボットとの通信が途切れました({why})。ロボットの位置と荷台を確認してください")
 
 
 def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
@@ -828,9 +848,13 @@ def _advance_bridge(conn: sqlite3.Connection, req: sqlite3.Row) -> None:
     state = _poll_bridge(conn)
     if state is None:
         # ブリッジ自体が落ちている(§4.4 B)なら依頼は running のまま保持し、復旧を待つ。
+        # ただし BRIDGE_DOWN_FAIL_SECONDS を超えたら諦める: ロボットは断片を走り終えて
+        # どこかで止まっているはずで、そこから盲目に続けるのは危ない
         # ブリッジは生きていて ROS/エンジンが落ちているのが続くなら、断片は失われている
         if _ros_down_count >= ROS_DOWN_FAIL_LIMIT:
             _fragment_lost(conn, req, "ROS かエンジンが応答しない")
+        elif _bridge_down_too_long():
+            _fragment_lost(conn, req, f"ブリッジが {_bridge_down_for():.0f} 秒応答しない")
         return
 
     if robot["phase"] == "error":

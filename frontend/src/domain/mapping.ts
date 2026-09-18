@@ -166,6 +166,8 @@ export function toTask(r: RequestRaw, noSpace = false): TransportTask {
           })()
         : undefined,
     pauseReason: r.status === 'running' ? (r.robot_pause_reason ?? undefined) : undefined,
+    // robot.phase = 'error' はブリッジ/ROS との通信断。人の手待ち(stuck)は別途 failed になる
+    robotOffline: r.status === 'running' && r.robot_phase === 'error',
     statusMessage: message,
     robotAdapterName: 'サーバー',
     completedAt: toMs(r.delivered_at),

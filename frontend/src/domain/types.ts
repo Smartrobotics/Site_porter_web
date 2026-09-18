@@ -71,6 +71,8 @@ export interface TransportTask extends TransportRequest {
   actionSince?: number
   /** 走行中の一時停止の理由(エンジンの reason)。"emergency stop" = 非常停止中。通常は undefined */
   pauseReason?: string
+  /** サーバーがロボット(ブリッジ)と話せていない。走行中の依頼だけ。復旧すれば自動で続く */
+  robotOffline?: boolean
   rawState?: number
   statusMessage: string
   robotTaskId?: string

@@ -9,6 +9,7 @@ import { BuildingCrossSection } from '../components/BuildingCrossSection'
 import { timelineSteps, phaseIndex } from '../domain/phase'
 import { IconCheck, IconAlert, IconArrow } from '../components/icons'
 import { PauseBanner } from '../components/PauseBanner'
+import { RobotOfflineBanner } from '../components/RobotOfflineBanner'
 import { formatTime } from '../lib/format'
 import { useSmoothProgress } from '../lib/useSmoothProgress'
 
@@ -106,6 +107,9 @@ export function TaskDetail() {
           </div>
         </div>
       )}
+
+      {/* サーバーがロボットと話せていない。待てば戻る */}
+      {isActive && task.robotOffline && <RobotOfflineBanner style={{ marginBottom: 16 }} />}
 
       {/* 走行中の一時停止(非常停止など)。ロボットは止まっているが依頼は続いている */}
       {isActive && <PauseBanner reason={task.pauseReason} style={{ marginBottom: 16 }} />}

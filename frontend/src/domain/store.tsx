@@ -68,7 +68,7 @@ const ROBOT_PHASE_LABEL: Record<string, string> = {
   delivery: '搬送中',
   return: '空荷台を回収中',
   homing: '戻り中',
-  error: 'エラー',
+  error: '通信できません',
 }
 
 export function robotPhaseLabel(phase: string): string {

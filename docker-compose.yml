@@ -14,6 +14,8 @@ services:
       ROBOT_URL: "http://host.docker.internal:8080"
       TRIP_TIMEOUT_SECONDS: 1800
       CANCEL_WAIT_SECONDS: 60
+      # ブリッジが応答しないまま走行を待つ上限。超えたら失敗 + 人の手待ち
+      BRIDGE_DOWN_FAIL_SECONDS: 120
       SCENARIO_DIR: /scenarios
       CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173,https://192.168.214.28"
     volumes:

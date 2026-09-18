@@ -6,6 +6,7 @@ import { robotPhaseLabel, useStore } from '../domain/store'
 import { floorLabel, SITE_NAME, type Area, type Master, type Rack } from '../domain/master'
 import { IconCart, IconAlert, IconQr, IconClose, IconPin } from '../components/icons'
 import { PauseBanner } from '../components/PauseBanner'
+import { RobotOfflineBanner } from '../components/RobotOfflineBanner'
 
 /**
  * 壁QRのエントリーURL(スマホ標準カメラで読む → ブラウザで現在地確定)。
@@ -217,6 +218,10 @@ export function Settings() {
                 </span>
               </div>
             ))}
+            {/* phase=error で stuck_reason が無いのは通信断。stuck は下のカードが担当 */}
+            {robot.phase === 'error' && !robot.stuckReason && (
+              <RobotOfflineBanner style={{ marginTop: 10, background: 'var(--grey-tint)' }} />
+            )}
             <PauseBanner reason={robot.pauseReason} style={{ marginTop: 10, background: 'var(--grey-tint)' }} />
             {robot.stuckReason && (
               <div
