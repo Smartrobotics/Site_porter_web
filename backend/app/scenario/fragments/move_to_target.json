@@ -9,7 +9,8 @@
         },
         {
             "action": "start_navigation",
-            "loop": false
+            "loop": false,
+            "obstacle_retry": 2
         }
     ]
 }
