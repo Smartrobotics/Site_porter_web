@@ -28,10 +28,6 @@ export function Settings() {
     setRackMarker,
     robot,
     resetRobotHome,
-    demoError,
-    setDemoError,
-    demoOffline,
-    setDemoOffline,
   } = useStore()
 
   return (
@@ -87,72 +83,6 @@ export function Settings() {
       </div>
 
       {/* ---------- 場所QRの発行 ---------- */}
-      {/* ---------- デモ用: エラーの再現 ---------- */}
-      <div className="section-label">デモ用: エラーの再現</div>
-      <div className="card card-pad" style={{ marginBottom: 18 }}>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          E6 / E8 は受け付けを断り、エラーモーダルを出します。[ 閉じる ] で内容確認画面に戻り、そのまま送信し直せます。
-          E7(搬送先に空き場所がない)と E9(ロボットが実行中)は設定なしで再現できます。
-          E7 は番地を全部埋めれば起き、E9 は搬送中にもう1件依頼すれば起きます。
-          どちらもモーダルは出さず、受け付けて順番待ちになります。
-        </p>
-        <div className="segmented">
-          {(
-            [
-              { v: 'none', label: 'なし', hint: '通常' },
-              { v: 'e6', label: 'E6', hint: 'サーバー接続不可' },
-              { v: 'e8', label: 'E8', hint: '荷台が使用中' },
-            ] as const
-          ).map((o) => (
-            <button
-              key={o.v}
-              className={`seg${demoError === o.v ? (o.v === 'none' ? ' on-normal' : ' on-urgent') : ''}`}
-              onClick={() => setDemoError(o.v)}
-            >
-              {o.label}
-              <small>{o.hint}</small>
-            </button>
-          ))}
-        </div>
-        {demoError !== 'none' && (
-          <p className="muted" style={{ fontSize: 12, marginTop: 10, color: 'var(--orange-dark)' }}>
-            現在、搬送依頼の送信は必ず失敗します。デモが終わったら「なし」に戻してください。
-          </p>
-        )}
-      </div>
-
-      {/* ---------- デモ用: 通信断 ---------- */}
-      <div className="section-label">デモ用: 通信断(E10 と 画面遷移時のエラー)</div>
-      <div className="card card-pad" style={{ marginBottom: 18 }}>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          サーバーとの通信を失敗させ続けます。2つの扱いの違いが確認できます。
-          ポーリング(E10)はエラーを出さず「搬送状況取得時刻」が止まるだけ。
-          画面遷移時の取得は共通のモーダル「サーバと通信できませんでした…」を出します。
-        </p>
-        <div className="segmented">
-          {(
-            [
-              { v: false, label: '通信あり', hint: '通常' },
-              { v: true, label: '通信断', hint: '取得が失敗し続ける' },
-            ] as const
-          ).map((o) => (
-            <button
-              key={String(o.v)}
-              className={`seg${demoOffline === o.v ? (o.v ? ' on-urgent' : ' on-normal') : ''}`}
-              onClick={() => setDemoOffline(o.v)}
-            >
-              {o.label}
-              <small>{o.hint}</small>
-            </button>
-          ))}
-        </div>
-        {demoOffline && (
-          <p className="muted" style={{ fontSize: 12, marginTop: 10, color: 'var(--orange-dark)' }}>
-            現在、サーバーとの通信は失敗し続けます。デモが終わったら「通信あり」に戻してください。
-          </p>
-        )}
-      </div>
-
       <AreaQrSection master={master} />
 
       {/* ---------- 荷台 ⇔ マーカーID ---------- */}

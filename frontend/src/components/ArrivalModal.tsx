@@ -2,14 +2,14 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../domain/store'
 import { areaLabel } from '../domain/master'
-import { IconCheck } from './icons'
+import { IconCheck, IconClose } from './icons'
 
 /** 画面上部に出しておく秒数。触らなければこの後に消える */
 const SHOW_MS = 8_000
 
 /**
- * 荷物が届いたことを知らせる帯。画面の上に出て、ボタンは無い。
- * 触れば通知画面へ、触らなければ SHOW_MS 後に消える。どちらでも「知らせた」扱い。
+ * 荷物が届いたことを知らせる帯。画面の上に出る。
+ * 触れば通知画面へ、×で閉じる、触らなければ SHOW_MS 後に消える。どれでも「知らせた」扱い。
  * ポーリングで「届いた・未確認」の依頼を見つけたら、どの画面にいても1回出す。
  */
 export function ArrivalModal() {
@@ -44,6 +44,16 @@ export function ArrivalModal() {
             {arrival.recipient ? `（${arrival.recipient}様宛）` : ''}・{to}
           </div>
         </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            dismissArrival()
+          }}
+          aria-label="閉じる"
+          style={{ color: 'var(--navy-faint)', padding: 4 }}
+        >
+          <IconClose size={16} />
+        </button>
       </div>
     </div>
   )

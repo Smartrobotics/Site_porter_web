@@ -13,15 +13,10 @@ const SCREEN_CHECK_TIMEOUT_MS = 5_000
  * 画面そのものはストアの値で描くので、ここでは GET /api/health で疎通だけ確かめる。
  * ポーリング断(E10)とは扱いが違う — あちらは何度も走るので黙って無視するが、
  * こちらは1回きりで、人が結果を待っているので知らせる必要がある。
- * 設定の「通信断」(demoOffline)は同じモーダルをサーバー無しで見せるためのもの。
  */
 export function useScreenData() {
-  const { demoOffline, reportScreenLoadFailed } = useStore()
+  const { reportScreenLoadFailed } = useStore()
   useEffect(() => {
-    if (demoOffline) {
-      reportScreenLoadFailed()
-      return
-    }
     let cancelled = false
     fetchWithTimeout('/api/health', undefined, SCREEN_CHECK_TIMEOUT_MS)
       .then((res) => {

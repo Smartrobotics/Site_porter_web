@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -86,10 +85,6 @@ const POLL_MS = 3000
 interface PersistState {
   /** 現在地。壁QRで読んだエリア */
   currentAreaId?: number
-  /** デモ用。搬送依頼の送信を必ず失敗させ、エラーモーダルを見せるための設定 */
-  demoError: DemoError
-  /** デモ用。true の間はポーリングが失敗し続ける(E10 の再現) */
-  demoOffline: boolean
   /**
    * この端末を使っている受取人の user.id。個人リンク(?user_id=N)で開いたときに入る。
    * 到着の知らせをこの人宛だけに絞る。無ければ全員分(配送員の端末)
@@ -99,15 +94,6 @@ interface PersistState {
   announcedIds: number[]
 }
 
-/**
- * none = 何も起こさない
- * e6 / e8 = モーダルを出して受付を断る
- *
- * E7(搬送先に空き場所がない)と E9(ロボットが実行中)はサーバー側で本当に起きるので、
- * 再現用の設定は持たない。番地を全部埋めれば E7、搬送中に依頼を足せば E9。
- */
-export type DemoError = 'none' | 'e6' | 'e8'
-
 /** 画面遷移時にサーバーと通信できなかったときの共通メッセージ */
 export const SCREEN_LOAD_ERROR = 'サーバと通信できませんでした。時間をおいて再度お試しください。'
 
@@ -116,15 +102,11 @@ export const INVALID_REQUEST_MESSAGE = '依頼の内容が正しくありませ�
 /** サーバー側の障害(500 など)。届いてはいるが処理できなかった */
 export const SERVER_FAULT_MESSAGE = 'サーバーでエラーが発生しました。時間をおいて再度お試しください。'
 
-export const DEMO_ERROR_MESSAGE: Record<'e6' | 'e8', string> = {
-  e6: 'サーバーに接続できませんでした。時間をおいて再度お試しください。',
-  e8: '指定された荷台は使用中です。別の荷台を選んでください。',
-}
+/** サーバーに届かなかった(タイムアウト・502/503/504) */
+export const SERVER_UNREACHABLE_MESSAGE = 'サーバーに接続できませんでした。時間をおいて再度お試しください。'
 
 const initialState: PersistState = {
   currentAreaId: undefined,
-  demoError: 'none',
-  demoOffline: false,
   viewerUserId: undefined,
   announcedIds: [],
 }
@@ -141,8 +123,6 @@ function loadState(): PersistState {
 
 type Action =
   | { type: 'SET_CURRENT_AREA'; areaId?: number }
-  | { type: 'SET_DEMO_ERROR'; value: DemoError }
-  | { type: 'SET_DEMO_OFFLINE'; value: boolean }
   | { type: 'SET_VIEWER_USER'; userId?: number }
   | { type: 'MARK_ANNOUNCED'; ids: number[] }
 
@@ -157,10 +137,6 @@ function reducer(state: PersistState, action: Action): PersistState {
       const merged = Array.from(new Set([...state.announcedIds, ...action.ids]))
       return { ...state, announcedIds: merged.slice(-200) }
     }
-    case 'SET_DEMO_ERROR':
-      return { ...state, demoError: action.value }
-    case 'SET_DEMO_OFFLINE':
-      return { ...state, demoOffline: action.value }
     default:
       return state
   }
@@ -206,8 +182,6 @@ interface StoreContextValue extends PersistState {
   setRackMarker: (rackId: number, markerId: number) => Promise<void>
   /** 荷台配置をまとめて反映する。1台ずつだと入れ替えが途中で衝突する */
   savePlacement: (items: { rackId: number; addressId: number }[]) => Promise<void>
-  setDemoError: (value: DemoError) => void
-  setDemoOffline: (value: boolean) => void
   /** 画面遷移時の取得に失敗した(共通モーダルを出す) */
   screenError: string | null
   reportScreenLoadFailed: () => void
@@ -245,10 +219,10 @@ async function send(path: string, body?: unknown): Promise<RequestRaw> {
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new Error(DEMO_ERROR_MESSAGE.e6)
+    throw new Error(SERVER_UNREACHABLE_MESSAGE)
   }
   if (res.status === 502 || res.status === 503 || res.status === 504) {
-    throw new Error(DEMO_ERROR_MESSAGE.e6)
+    throw new Error(SERVER_UNREACHABLE_MESSAGE)
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
@@ -275,9 +249,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // 画面遷移時の取得失敗。ポーリング断(E10)と違い、こちらは黙らずに知らせる
   const [screenError, setScreenError] = useState<string | null>(null)
 
-  const offlineRef = useRef(state.demoOffline)
-  offlineRef.current = state.demoOffline
-
   const pushToast = (t: Omit<Toast, 'id'>) => {
     const toast: Toast = { ...t, id: uid('toast') }
     setToasts((prev) => [...prev, toast])
@@ -296,7 +267,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * エリア・番地・受取人は動かないので、こちらは起動時の1回だけ。
    */
   const refresh = useCallback(async () => {
-    if (offlineRef.current) return
     try {
       const [reqRes, rackRes, robotRes] = await Promise.all([
         fetchWithTimeout('/api/request'),
@@ -412,10 +382,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }
 
   const startTransport = async (req: TransportRequest): Promise<number> => {
-    // E6 / E8 はデモ用。サーバーまで行かせずにモーダルを出す
-    if (state.demoError !== 'none') {
-      throw new Error(DEMO_ERROR_MESSAGE[state.demoError])
-    }
     const created = await send('/api/request', {
       rack_id: req.rackId,
       from_area_id: req.fromAreaId,
@@ -540,11 +506,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.detail ?? `PUT placement -> ${res.status}`)
       await refresh()
-    },
-    setDemoError: (value) => dispatch({ type: 'SET_DEMO_ERROR', value }),
-    setDemoOffline: (value) => {
-      if (!value) setScreenError(null)
-      dispatch({ type: 'SET_DEMO_OFFLINE', value })
     },
     screenError,
     reportScreenLoadFailed: () => setScreenError(SCREEN_LOAD_ERROR),
