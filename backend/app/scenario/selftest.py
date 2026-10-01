@@ -51,6 +51,17 @@ def check(name, cond, detail=''):
         ok = False
 
 
+# Параметры проверки препятствий у move_forward_time (obstacle_check и т.п.) есть
+# только во фрагментах сайта, в эталонах робота их нет — сравниваем без них
+MFT_PATH_CHECK_KEYS = ('obstacle_check', 'clear_dist', 'block_timeout', 'edge_x')
+
+
+def no_path_check(steps):
+    return [{k: v for k, v in s.items() if k not in MFT_PATH_CHECK_KEYS}
+            if s.get('action') == 'move_forward_time' else s
+            for s in steps]
+
+
 # --- 1. эквивалентность рабочим сценариям -------------------------------
 print('1. Совпадение с проверенными сценариями')
 CASES = [
@@ -68,6 +79,7 @@ for name, params in CASES:
         continue
     want = json.load(open(path, encoding='utf-8'))
     got = render(dict(params, scenario_name=name))
+    got['steps'] = no_path_check(got['steps'])
     if got == want:
         check(name, True)
     else:
@@ -172,7 +184,7 @@ for kind in FRAGMENTS:
         skip(kind, 'эталона нет; задайте ROBOT_REPO')
         continue
     want = json.load(open(path, encoding='utf-8'))['steps']
-    got = render_fragment(kind, REF_PARAMS[kind])['steps']
+    got = no_path_check(render_fragment(kind, REF_PARAMS[kind])['steps'])
     if got == want:
         check(kind, True)
     else:
@@ -247,7 +259,7 @@ else:
                {'action': 'move_forward_time', 'forward': 0}]
             # 2F после лифта: − проезд вперёд, − заход в холл (route 3)
             + want[4:54] + want[57:])
-    got = chain_steps(PLANS['deliver_collect'])
+    got = no_path_check(chain_steps(PLANS['deliver_collect']))
     if got == want:
         check('совпадает', True)
     else:

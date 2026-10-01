@@ -4,7 +4,10 @@
     "steps": [
         {
             "action": "move_forward_time",
-            "forward": 0
+            "forward": 0,
+            "obstacle_check": true,
+            "clear_dist": 0.30,
+            "block_timeout": 30
         },
         {
             "action": "lift_control",
@@ -20,7 +23,11 @@
         },
         {
             "action": "move_forward_time",
-            "forward": 1
+            "forward": 1,
+            "obstacle_check": true,
+            "clear_dist": 0.30,
+            "block_timeout": 30,
+            "edge_x": 0.52
         }
     ]
 }
