@@ -22,16 +22,16 @@ def _dropoff(s):
 
 def add_plan_args(ap):
     ap.add_argument('chain', choices=['deliver', 'collect', 'deliver_collect'])
-    ap.add_argument('--pickup', type=_pickup, required=True, help='ЭТАЖ:PATH:МАРКЕР')
-    ap.add_argument('--dropoff', type=_dropoff, required=True, help='ЭТАЖ:PATH')
-    ap.add_argument('--collect-pickup', type=_pickup, help='deliver_collect: порожняя')
-    ap.add_argument('--collect-dropoff', type=_dropoff, help='deliver_collect: куда её')
+    ap.add_argument('--pickup', type=_pickup, required=True, help='FLOOR:PATH:MARKER')
+    ap.add_argument('--dropoff', type=_dropoff, required=True, help='FLOOR:PATH')
+    ap.add_argument('--collect-pickup', type=_pickup, help='deliver_collect: the empty rack')
+    ap.add_argument('--collect-dropoff', type=_dropoff, help='deliver_collect: where it goes')
     ap.add_argument('--no-init', action='store_true',
-                    help='без init и переезда с HOME: робот уже на месте '
-                         '(хвост collect после доставки)')
+                    help='no init and no trip from HOME: the robot is already there '
+                         '(the collect tail after a delivery)')
     ap.add_argument('--no-home', action='store_true',
-                    help='остановиться после put_down, домой не ехать '
-                         '(deliver до развилки)')
+                    help='stop after put_down, do not drive home '
+                         '(deliver up to the split)')
 
 
 def build_plan(a, ap=None):
@@ -42,12 +42,12 @@ def build_plan(a, ap=None):
     if a.chain == 'collect':
         return plan_collect(a.pickup, a.dropoff, floors, from_home, go_home)
     if not (a.collect_pickup and a.collect_dropoff):
-        msg = 'deliver_collect требует --collect-pickup и --collect-dropoff'
+        msg = 'deliver_collect needs --collect-pickup and --collect-dropoff'
         if ap:
             ap.error(msg)
         raise ValueError(msg)
     if a.no_init or a.no_home:
-        msg = 'deliver_collect всегда из HOME в HOME; --no-init/--no-home не применимы'
+        msg = 'deliver_collect always runs HOME to HOME; --no-init/--no-home do not apply'
         if ap:
             ap.error(msg)
         raise ValueError(msg)
@@ -56,11 +56,11 @@ def build_plan(a, ap=None):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='SitePorter: рейс из фрагментов')
+    ap = argparse.ArgumentParser(description='SitePorter: a trip built out of fragments')
     add_plan_args(ap)
-    ap.add_argument('--run-id', help='по умолчанию timestamp')
+    ap.add_argument('--run-id', help='defaults to a timestamp')
     ap.add_argument('--scenario-dir', default=SCENARIO_DIR)
-    ap.add_argument('--dry-run', action='store_true', help='показать план, не записывая')
+    ap.add_argument('--dry-run', action='store_true', help='print the plan without writing')
     a = ap.parse_args()
     plan = build_plan(a, ap)
 
@@ -72,9 +72,9 @@ def main():
         return
 
     names = generate_chain(plan, a.run_id, a.scenario_dir)
-    print(f'{len(names)} фрагментов в {a.scenario_dir}')
-    print('публиковать по одному, дождавшись завершения предыдущего'
-          ' (или run_chain.py — он делает это сам):')
+    print(f'{len(names)} fragments in {a.scenario_dir}')
+    print('publish them one at a time, each after the previous one finishes'
+          ' (or use run_chain.py, which does that for you):')
     for n in names:
         print(f'  rostopic pub -1 /scenario_name std_msgs/String "data: \'{n}\'"')
 

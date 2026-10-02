@@ -27,7 +27,7 @@ def _substitute(node, params):
         if m:
             key = m.group(1)
             if key not in params:
-                raise KeyError(f'не задан параметр {key}')
+                raise KeyError(f'missing parameter {key}')
             return params[key]
     return node
 
@@ -38,7 +38,7 @@ def render(params, template=TEMPLATE):
     out = _substitute(tpl, params)
     left = _find_placeholders(out)
     if left:
-        raise ValueError(f'остались незаполненные плейсхолдеры: {sorted(left)}')
+        raise ValueError(f'unfilled placeholders left: {sorted(left)}')
     return out
 
 
@@ -107,20 +107,20 @@ def _floor(floors, no):
     try:
         return floors['floors'][str(no)]
     except KeyError:
-        raise KeyError(f'этаж {no} не описан в floors.json')
+        raise KeyError(f'floor {no} is not described in floors.json')
 
 
 def home_floor(floors):
     homes = [int(k) for k, v in floors['floors'].items() if 'home' in v]
     if len(homes) != 1:
-        raise ValueError(f'в floors.json должен быть ровно один этаж с home, есть {homes}')
+        raise ValueError(f'floors.json must hold exactly one floor with home, found {homes}')
     return homes[0]
 
 
 def init_params(floor, floors):
     fl = _floor(floors, floor)
     if 'home' not in fl:
-        raise ValueError(f'init возможен только с этажа HOME, этаж {floor} без home')
+        raise ValueError(f'init is only possible from the HOME floor; floor {floor} has no home')
     h = fl['home']
     return {'map_no': fl['map_no'],
             'home_x': h['x'], 'home_y': h['y'], 'home_yaw': h['yaw']}
@@ -141,7 +141,7 @@ def elv_params(from_floor, to_floor, floors):
     try:
         e = floors['elevator'][key]
     except KeyError:
-        raise KeyError(f'переход {key} не описан в floors.json')
+        raise KeyError(f'transition {key} is not described in floors.json')
     src, dst = _floor(floors, from_floor), _floor(floors, to_floor)
     return {'start_floor': int(from_floor), 'goal_floor': int(to_floor),
             'elv_pose_map_no': src['map_no'],
@@ -154,7 +154,7 @@ def elv_params(from_floor, to_floor, floors):
 
 def render_fragment(kind, params, name='fragment'):
     if kind not in FRAGMENTS:
-        raise ValueError(f'неизвестный фрагмент {kind}, есть {FRAGMENTS}')
+        raise ValueError(f'unknown fragment {kind}; known: {FRAGMENTS}')
     return render(dict(params, scenario_name=name),
                   os.path.join(FRAG_DIR, kind + '.json'))
 
@@ -176,7 +176,7 @@ def _elv_wait(floor, floors):
 
 def _transfer(from_floor, to_floor, floors):
     if int(from_floor) == int(to_floor):
-        raise NotImplementedError(f'рейс в пределах этажа {from_floor} не поддержан')
+        raise NotImplementedError(f'a trip within floor {from_floor} is not supported')
     return [_elv_wait(from_floor, floors), ('elv', elv_params(from_floor, to_floor, floors))]
 
 
@@ -257,22 +257,22 @@ def cleanup(scenario_dir=SCENARIO_DIR, keep_seconds=24 * 3600):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='SitePorter: сгенерировать сценарий для робота')
+    ap = argparse.ArgumentParser(description='SitePorter: generate a scenario for the robot')
     ap.add_argument('--pickup-marker', type=int, required=True,
-                    help='маркер платформы, которую забираем на 2F')
+                    help='marker of the rack to pick up on 2F')
     ap.add_argument('--pickup-path', type=int, required=True,
-                    help='path_no места, где эта платформа стоит на 2F')
+                    help='path_no of the spot that rack stands on, on 2F')
     ap.add_argument('--dropoff-path', type=int, required=True,
-                    help='path_no места выгрузки на 1F')
+                    help='path_no of the drop-off spot on 1F')
     ap.add_argument('--return-pickup-path', type=int, required=True,
-                    help='path_no места, откуда забираем порожнюю на 1F')
+                    help='path_no of the spot the empty rack is picked up from on 1F')
     ap.add_argument('--return-marker', type=int, required=True,
-                    help='маркер порожней платформы')
+                    help='marker of the empty rack')
     ap.add_argument('--return-dropoff-path', type=int, required=True,
-                    help='path_no места на 2F, куда ставим порожнюю платформу')
-    ap.add_argument('--name', help='имя сценария (по умолчанию run_<timestamp>)')
+                    help='path_no of the 2F spot the empty rack is put down at')
+    ap.add_argument('--name', help='scenario name (defaults to run_<timestamp>)')
     ap.add_argument('--scenario-dir', default=SCENARIO_DIR)
-    ap.add_argument('--dry-run', action='store_true', help='вывести JSON, не записывая')
+    ap.add_argument('--dry-run', action='store_true', help='print the JSON without writing')
     a = ap.parse_args()
 
     params = {
@@ -292,8 +292,8 @@ def main():
                     a.return_pickup_path, a.return_marker, a.return_dropoff_path,
                     scenario_dir=a.scenario_dir, name=a.name)
     print(name)
-    print(f'  файл:      {os.path.join(a.scenario_dir, name + ".json")}')
-    print(f'  запустить: rostopic pub -1 /scenario_name std_msgs/String "data: \'{name}\'"')
+    print(f'  file: {os.path.join(a.scenario_dir, name + ".json")}')
+    print(f'  run:  rostopic pub -1 /scenario_name std_msgs/String "data: \'{name}\'"')
 
 
 if __name__ == '__main__':

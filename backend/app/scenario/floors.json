@@ -1,5 +1,5 @@
 {
-    "_comment": "Константы объекта, которые генератор действительно читает: home / home_path_no / elv_pose_path_no / elv_wait_pose_path_no и elevator. map_no сюда НЕ входит — он берётся из базы (area.map_no), потому что его показывает интерфейс и он меняется вместе с объектом. При переезде на другой объект замерять заново: подставленные наугад значения уводят робота не туда.",
+    "_comment": "Site constants the generator actually reads: home / home_path_no / elv_pose_path_no / elv_wait_pose_path_no and elevator. map_no is NOT among them: it comes from the database (area.map_no), because the interface shows it and it changes together with the site. Measure these again when moving to another site: guessed values send the robot to the wrong place.",
     "floors": {
         "2": {
             "map_no": 19,

@@ -45,7 +45,7 @@ def no_path_check(steps):
             for s in steps]
 
 
-print('1. Совпадение с проверенными сценариями')
+print('1. Match against the verified scenarios')
 CASES = [
     ('press_scenario_4', dict(pickup_marker=4, pickup_path_no=1, dropoff_path_no=3,
                               return_pickup_path_no=4, return_marker=5,
@@ -57,7 +57,7 @@ CASES = [
 for name, params in CASES:
     path = os.path.join(SCEN, name + '.json')
     if not os.path.exists(path):
-        skip(name, 'эталона нет; задайте ROBOT_REPO')
+        skip(name, 'no reference; set ROBOT_REPO')
         continue
     want = json.load(open(path, encoding='utf-8'))
     got = render(dict(params, scenario_name=name))
@@ -65,55 +65,55 @@ for name, params in CASES:
     if got == want:
         check(name, True)
     else:
-        diffs = [f'шаг {i}' for i, (a, b) in enumerate(zip(got['steps'], want['steps'])) if a != b]
-        check(name, False, 'расходятся ' + ', '.join(diffs[:5]))
+        diffs = [f'step {i}' for i, (a, b) in enumerate(zip(got['steps'], want['steps'])) if a != b]
+        check(name, False, 'differ at ' + ', '.join(diffs[:5]))
 
-print('\n2. Подстановка параметров')
+print('\n2. Parameter substitution')
 p = dict(scenario_name='t', pickup_marker=11, pickup_path_no=12, dropoff_path_no=13,
          return_pickup_path_no=14, return_marker=15, return_dropoff_path_no=16)
 s = render(p)['steps']
-check('шаг 4  pickup_path_no',         s[4].get('path_no') == 12)
-check('шаг 6  pickup_marker',          s[6].get('marker_id') == 11)
-check('шаг 26 dropoff_path_no',        s[26].get('path_no') == 13)
-check('шаг 32 return_pickup_path_no',  s[32].get('path_no') == 14)
-check('шаг 34 return_marker',          s[34].get('marker_id') == 15)
-check('шаг 57 return_dropoff_path_no', s[57].get('path_no') == 16)
-check('значения остались числами', all(isinstance(v, int) for v in
+check('step 4  pickup_path_no',         s[4].get('path_no') == 12)
+check('step 6  pickup_marker',          s[6].get('marker_id') == 11)
+check('step 26 dropoff_path_no',        s[26].get('path_no') == 13)
+check('step 32 return_pickup_path_no',  s[32].get('path_no') == 14)
+check('step 34 return_marker',          s[34].get('marker_id') == 15)
+check('step 57 return_dropoff_path_no', s[57].get('path_no') == 16)
+check('values stayed numbers', all(isinstance(v, int) for v in
       (s[4]['path_no'], s[6]['marker_id'], s[57]['path_no'])))
 
-print('\n3. Защита от неполных параметров')
+print('\n3. Incomplete parameters are rejected')
 try:
     render({'scenario_name': 'x', 'pickup_marker': 1})
-    check('неполный набор отклонён', False, 'исключения не было')
+    check('incomplete set rejected', False, 'no exception raised')
 except KeyError as e:
-    check('неполный набор отклонён', True, str(e))
+    check('incomplete set rejected', True, str(e))
 
-print('\n4. Запись во временный каталог')
+print('\n4. Writing to a temporary directory')
 tmp = tempfile.mkdtemp(prefix='scen_selftest_')
 try:
     name = generate(pickup_marker=1, pickup_path_no=4, dropoff_path_no=3,
                     return_pickup_path_no=4, return_marker=2,
                     return_dropoff_path_no=2, scenario_dir=tmp, name='run_selftest')
     f = os.path.join(tmp, name + '.json')
-    check('файл создан', os.path.exists(f))
+    check('file created', os.path.exists(f))
     d = json.load(open(f, encoding='utf-8'))
-    check('валидный JSON, 65 шагов', len(d.get('steps', [])) == 65, str(len(d.get('steps', []))))
-    check('name внутри совпадает', d.get('name') == name, str(d.get('name')))
-    check('плейсхолдеров не осталось', '{{' not in open(f, encoding='utf-8').read())
-    check('временные файлы убраны', not [x for x in os.listdir(tmp) if x.startswith('.tmp_')])
+    check('valid JSON, 65 steps', len(d.get('steps', [])) == 65, str(len(d.get('steps', []))))
+    check('name inside matches', d.get('name') == name, str(d.get('name')))
+    check('no placeholders left', '{{' not in open(f, encoding='utf-8').read())
+    check('temporary files are gone', not [x for x in os.listdir(tmp) if x.startswith('.tmp_')])
 
-    print('\n5. cleanup удаляет только run_*')
+    print('\n5. cleanup removes only run_*')
     keep = os.path.join(tmp, 'press_scenario_4.json')
     shutil.copy(f, keep)
     removed = cleanup(scenario_dir=tmp, keep_seconds=0)
-    check('run_* удалён', name + '.json' in removed)
-    check('чужой файл на месте', os.path.exists(keep))
+    check('run_* removed', name + '.json' in removed)
+    check('a foreign file is left alone', os.path.exists(keep))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-print('\n6. Каталог сценариев робота')
+print('\n6. The robot scenario directory')
 stray = [f for f in os.listdir(SCEN) if f.startswith(PREFIX)] if os.path.isdir(SCEN) else []
-check('сгенерированных файлов не оставлено', not stray, ', '.join(stray))
+check('no generated files left behind', not stray, ', '.join(stray))
 
 DOCS_FRAG = os.getenv('ROBOT_DOCS_DIR',
                       os.path.join(ROBOT_REPO, 'docs', 'SitePorterScenario'))
@@ -136,7 +136,7 @@ DROPOFF = {'floor': 1, 'path_no': 3}
 C_PICKUP = {'floor': 1, 'path_no': 4, 'marker_id': 5}
 C_DROPOFF = {'floor': 2, 'path_no': 1}
 
-print('\n7. Фрагменты совпадают с docs/SitePorterScenario')
+print('\n7. Fragments match docs/SitePorterScenario')
 REF_PARAMS = {
     'init':           {'map_no': 14, 'home_x': -3.678, 'home_y': -6.48, 'home_yaw': 359.8},
     'pick_up':        {'map_no': 14, 'path_no': 1, 'marker_id': 4},
@@ -150,19 +150,19 @@ REF_PARAMS = {
 for kind in FRAGMENTS:
     path = os.path.join(DOCS_FRAG, kind + '.json')
     if not os.path.exists(path):
-        skip(kind, 'эталона нет; задайте ROBOT_REPO')
+        skip(kind, 'no reference; set ROBOT_REPO')
         continue
     want = json.load(open(path, encoding='utf-8'))['steps']
     got = no_path_check(render_fragment(kind, REF_PARAMS[kind])['steps'])
     if got == want:
         check(kind, True)
     else:
-        diffs = [f'шаг {i}' for i, (a, b) in enumerate(zip(got, want)) if a != b]
+        diffs = [f'step {i}' for i, (a, b) in enumerate(zip(got, want)) if a != b]
         if len(got) != len(want):
-            diffs.append(f'длина {len(got)} vs {len(want)}')
-        check(kind, False, 'расходятся ' + ', '.join(diffs[:5]))
+            diffs.append(f'length {len(got)} vs {len(want)}')
+        check(kind, False, 'differ at ' + ', '.join(diffs[:5]))
 
-print('\n8. Цепочки по scenario.drawio')
+print('\n8. Chains as drawn in scenario.drawio')
 FLOWS = {
     'deliver_collect': ['init', 'pick_up', 'move_to_target', 'elv', 'move_to_target',
                         'put_down', 'pick_up', 'move_to_target', 'elv', 'move_to_target',
@@ -190,7 +190,7 @@ try:
     for name, want in FLOWS.items():
         check('floors.json: ' + name, [k for k, _ in live[name]] == want)
 except (KeyError, ValueError) as e:
-    check('floors.json пригоден для всех цепочек', False, str(e))
+    check('floors.json works for every chain', False, str(e))
 
 split = (plan_deliver(PICKUP, DROPOFF, LEGACY_FLOORS, go_home=False)
          + plan_collect(C_PICKUP, C_DROPOFF, LEGACY_FLOORS, from_home=False))
@@ -199,14 +199,14 @@ check('deliver(go_home=False) + collect(from_home=False) == deliver_collect',
 
 def _s(d):
     return {**d, 'floor': str(d['floor'])}
-check('этаж строкой == этаж числом',
+check('floor as a string == floor as a number',
       plan_deliver_collect(_s(PICKUP), _s(DROPOFF), _s(C_PICKUP), _s(C_DROPOFF), LEGACY_FLOORS)
       == PLANS['deliver_collect'])
 
-print('\n9. deliver_collect == press_scenario_4 (+2 осознанных отличия)')
+print('\n9. deliver_collect == press_scenario_4 (+2 deliberate differences)')
 ref = os.path.join(SCEN, 'press_scenario_4.json')
 if not os.path.exists(ref):
-    skip('press_scenario_4', 'эталона нет; задайте ROBOT_REPO')
+    skip('press_scenario_4', 'no reference; set ROBOT_REPO')
 else:
     want = json.load(open(ref, encoding='utf-8'))['steps']
     want = (want[:4]
@@ -215,54 +215,54 @@ else:
             + want[4:54] + want[57:])
     got = no_path_check(chain_steps(PLANS['deliver_collect']))
     if got == want:
-        check('совпадает', True)
+        check('matches', True)
     else:
-        diffs = [f'шаг {i}: {a} != {b}' for i, (a, b) in enumerate(zip(got, want)) if a != b]
+        diffs = [f'step {i}: {a} != {b}' for i, (a, b) in enumerate(zip(got, want)) if a != b]
         if len(got) != len(want):
-            diffs.append(f'длина {len(got)} vs {len(want)}')
-        check('совпадает', False, '; '.join(diffs[:3]))
+            diffs.append(f'length {len(got)} vs {len(want)}')
+        check('matches', False, '; '.join(diffs[:3]))
 
-print('\n10. Запись цепочки во временный каталог')
+print('\n10. Writing a chain to a temporary directory')
 tmp = tempfile.mkdtemp(prefix='scen_selftest_')
 try:
     names = generate_chain(PLANS['deliver'], run_id='selftest', scenario_dir=tmp)
-    check('имена по порядку',
+    check('names in order',
           names == [fragment_name('selftest', i, k) for i, (k, _) in enumerate(PLANS['deliver'], 1)],
           ', '.join(names))
-    check('первый — run_selftest_01_init', names[0] == 'run_selftest_01_init', names[0])
+    check('the first is run_selftest_01_init', names[0] == 'run_selftest_01_init', names[0])
     files = [os.path.join(tmp, n + '.json') for n in names]
-    check('все файлы созданы', all(os.path.exists(f) for f in files))
-    check('name внутри совпадает', all(json.load(open(f, encoding='utf-8'))['name'] == n
+    check('all files created', all(os.path.exists(f) for f in files))
+    check('name inside matches', all(json.load(open(f, encoding='utf-8'))['name'] == n
                                         for f, n in zip(files, names)))
-    check('плейсхолдеров не осталось', not any('{{' in open(f, encoding='utf-8').read() for f in files))
-    check('временные файлы убраны', not [x for x in os.listdir(tmp) if x.startswith('.tmp_')])
+    check('no placeholders left', not any('{{' in open(f, encoding='utf-8').read() for f in files))
+    check('temporary files are gone', not [x for x in os.listdir(tmp) if x.startswith('.tmp_')])
     removed = cleanup(scenario_dir=tmp, keep_seconds=0)
-    check('cleanup убирает фрагменты', sorted(removed) == sorted(n + '.json' for n in names))
+    check('cleanup removes the fragments', sorted(removed) == sorted(n + '.json' for n in names))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-print('\n11. Защита от неверных параметров')
+print('\n11. Invalid parameters are rejected')
 try:
     plan_deliver({'floor': 2, 'path_no': 1, 'marker_id': 4}, {'floor': 2, 'path_no': 3}, FLOORS)
-    check('рейс в пределах этажа отклонён', False, 'исключения не было')
+    check('a same-floor trip is rejected', False, 'no exception raised')
 except NotImplementedError:
-    check('рейс в пределах этажа отклонён', True)
+    check('a same-floor trip is rejected', True)
 try:
     plan_deliver({'floor': 3, 'path_no': 1, 'marker_id': 4}, DROPOFF, FLOORS)
-    check('неизвестный этаж отклонён', False, 'исключения не было')
+    check('an unknown floor is rejected', False, 'no exception raised')
 except KeyError:
-    check('неизвестный этаж отклонён', True)
+    check('an unknown floor is rejected', True)
 try:
     plan_deliver({'floor': 1, 'path_no': 1, 'marker_id': 4}, {'floor': 2, 'path_no': 1}, FLOORS)
-    check('init не с этажа HOME отклонён', False, 'исключения не было')
+    check('init from a non-HOME floor is rejected', False, 'no exception raised')
 except ValueError:
-    check('init не с этажа HOME отклонён', True)
+    check('init from a non-HOME floor is rejected', True)
 try:
     render_fragment('pick_up', {'map_no': 14})
-    check('неполные параметры фрагмента отклонены', False, 'исключения не было')
+    check('incomplete fragment parameters are rejected', False, 'no exception raised')
 except KeyError:
-    check('неполные параметры фрагмента отклонены', True)
+    check('incomplete fragment parameters are rejected', True)
 
-note = f' (пропущено сравнений с эталонами: {skipped})' if skipped else ''
-print('\n' + ('ВСЁ ПРОШЛО' if ok else 'ЕСТЬ ОШИБКИ') + note)
+note = f' (reference comparisons skipped: {skipped})' if skipped else ''
+print('\n' + ('ALL PASSED' if ok else 'FAILURES') + note)
 sys.exit(0 if ok else 1)
