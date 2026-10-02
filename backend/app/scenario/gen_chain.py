@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-SitePorter — собрать рейс из фрагментов и записать их в каталог робота.
-
-Для ручного прогона без сервера. Печатает имена в порядке публикации;
-публиковать по одному, следующее — после завершения предыдущего
-(упавший сценарий не очищает очередь движка).
-
-    # как press_scenario_4: платформа 4 с 2F path 1 → 1F path 3,
-    # обратно порожняя 5 с 1F path 4 → 2F path 1
-    python3 gen_chain.py deliver_collect --pickup 2:1:4 --dropoff 1:3 \
-                         --collect-pickup 1:4:5 --collect-dropoff 2:1
-
-    python3 gen_chain.py deliver --pickup 2:1:4 --dropoff 1:3
-    python3 gen_chain.py collect --pickup 1:4:5 --dropoff 2:1
-
-    # развилка сервера руками: доставка до put_down, потом хвост возврата
-    python3 gen_chain.py deliver --pickup 2:1:4 --dropoff 1:3 --no-home
-    python3 gen_chain.py collect --pickup 1:4:5 --dropoff 2:1 --no-init
-
-Формат: --pickup ЭТАЖ:PATH:МАРКЕР, --dropoff ЭТАЖ:PATH.
---dry-run печатает план, не записывая.
-"""
 
 import argparse
 import json
@@ -43,7 +21,6 @@ def _dropoff(s):
 
 
 def add_plan_args(ap):
-    """Аргументы, описывающие рейс. Общие для gen_chain.py и run_chain.py."""
     ap.add_argument('chain', choices=['deliver', 'collect', 'deliver_collect'])
     ap.add_argument('--pickup', type=_pickup, required=True, help='ЭТАЖ:PATH:МАРКЕР')
     ap.add_argument('--dropoff', type=_dropoff, required=True, help='ЭТАЖ:PATH')
@@ -58,7 +35,6 @@ def add_plan_args(ap):
 
 
 def build_plan(a, ap=None):
-    """План по аргументам add_plan_args()."""
     floors = load_floors()
     from_home, go_home = not a.no_init, not a.no_home
     if a.chain == 'deliver':

@@ -1,35 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-SitePorter — генерация сценария для робота из шаблона (путь 0).
-
-Робот принимает только ИМЯ сценария (`/scenario_name`, std_msgs/String) и читает
-`<scenario_dir>/<имя>.json`. Параметров он не принимает. Поэтому сервер, который
-стоит на том же роботе, подставляет значения сам, кладёт готовый файл в каталог
-сценариев и публикует его имя. Правок в C++ не требуется.
-
-Движок читает файл заново на каждый запуск (кэша нет), поэтому свежесозданный
-сценарий подхватывается сразу.
-
-Шаблон `template_roundtrip.json` получен из проверенного `press_scenario_4.json`
-заменой шести значений на плейсхолдеры. Остальные шаги не тронуты.
-Четыре из них — те, которыми `press_scenario_4` отличается от
-`press_scenario_5`. Ещё два (`pickup_path_no`, `return_dropoff_path_no`) —
-подъезды к местам на 2F: в обоих готовых сценариях там `path_no=1`, потому что
-рейс возвращает платформу на то же место, откуда забрал.
-
-Использование как CLI:
-    python3 gen_scenario.py --pickup-marker 4 --pickup-path 1 --dropoff-path 3 \
-                            --return-pickup-path 4 --return-marker 5 \
-                            --return-dropoff-path 1
-
-Использование из сервера:
-    from gen_scenario import generate
-    name = generate(pickup_marker=4, pickup_path_no=1, dropoff_path_no=3,
-                    return_pickup_path_no=4, return_marker=5,
-                    return_dropoff_path_no=1)
-    # → опубликовать name в /scenario_name
-"""
 
 import argparse
 import json
@@ -41,21 +11,13 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(HERE, 'template_roundtrip.json')
 
-# Каталог сценариев робота. Тот же путь задан в
-# scenario_control/launch/scenario_control_json.launch.
-#
-# Ходовой процесс и генератор смотрят в один и тот же каталог: файлы никуда
-# не передаются, это bind mount. Поэтому путь задаётся снаружи —
-# в docker-compose.yml приложения и в launch-файле робота он разный.
 SCENARIO_DIR = os.getenv('SCENARIO_DIR', '/scenarios')
 
-PREFIX = 'run_'          # имена сгенерированных сценариев
+PREFIX = 'run_'
 PLACEHOLDER = re.compile(r'^\{\{(\w+)\}\}$')
 
 
 def _substitute(node, params):
-    """Рекурсивно заменить строки вида {{key}} значениями из params.
-    Тип берётся из params — marker_id должен остаться числом, а не строкой."""
     if isinstance(node, dict):
         return {k: _substitute(v, params) for k, v in node.items()}
     if isinstance(node, list):
@@ -71,7 +33,6 @@ def _substitute(node, params):
 
 
 def render(params, template=TEMPLATE):
-    """Вернуть готовый сценарий как dict. Файл не пишется."""
     with open(template, encoding='utf-8') as f:
         tpl = json.load(f)
     out = _substitute(tpl, params)
@@ -99,8 +60,6 @@ def _find_placeholders(node, acc=None):
 def generate(pickup_marker, pickup_path_no, dropoff_path_no,
              return_pickup_path_no, return_marker, return_dropoff_path_no,
              scenario_dir=SCENARIO_DIR, name=None, template=TEMPLATE):
-    """Отрисовать сценарий и записать в каталог робота. Вернуть имя без .json,
-    которое нужно опубликовать в /scenario_name."""
     if name is None:
         name = f'{PREFIX}{int(time.time())}'
     params = {
@@ -118,8 +77,6 @@ def generate(pickup_marker, pickup_path_no, dropoff_path_no,
 
 
 def _write_atomic(scenario_dir, name, data):
-    """Записать <name>.json в каталог робота. Атомарно: движок может читать
-    каталог в этот же момент, и недописанный файл сломал бы разбор JSON."""
     os.makedirs(scenario_dir, exist_ok=True)
     path = os.path.join(scenario_dir, name + '.json')
     fd, tmp = tempfile.mkstemp(dir=scenario_dir, prefix='.tmp_', suffix='.json')
@@ -128,9 +85,6 @@ def _write_atomic(scenario_dir, name, data):
             json.dump(data, f, ensure_ascii=False, indent=4)
             f.flush()
             os.fsync(f.fileno())
-        # mkstemp даёт 0600, и os.replace эти права сохраняет. Движок может
-        # работать под другим пользователем (сервер — процесс хоста, движок —
-        # root в контейнере), и тогда файл окажется нечитаемым.
         os.chmod(tmp, 0o644)
         os.replace(tmp, path)
     except Exception:
@@ -138,20 +92,6 @@ def _write_atomic(scenario_dir, name, data):
             os.unlink(tmp)
         raise
 
-
-# ======================================================================
-# Фрагменты — рейс из отдельных сценариев («путь 0», вторая ступень)
-#
-# Движок держит очередь /scenario_name и выполняет имена по одному, поэтому
-# рейс можно собирать из коротких сценариев: сервер публикует следующий
-# фрагмент, когда предыдущий завершился. Развилка «возвращать порожнюю или
-# нет» тогда принимается после put_down, а не при старте.
-#
-# Шаблоны лежат в fragments/, константы объекта (карты, HOME, лифт) — в
-# floors.json. Схема цепочек — docs/SitePorterScenario/scenario.drawio.
-#
-# Правило движка: упавший сценарий НЕ очищает очередь. Поэтому фрагменты
-# публикуются строго по одному — никогда не класть в очередь всю цепочку.
 
 FRAG_DIR = os.path.join(HERE, 'fragments')
 FLOORS_FILE = os.path.join(HERE, 'floors.json')
@@ -171,14 +111,11 @@ def _floor(floors, no):
 
 
 def home_floor(floors):
-    """Этаж, на котором стоит HOME. Он один."""
     homes = [int(k) for k, v in floors['floors'].items() if 'home' in v]
     if len(homes) != 1:
         raise ValueError(f'в floors.json должен быть ровно один этаж с home, есть {homes}')
     return homes[0]
 
-
-# --- параметры фрагментов ---------------------------------------------
 
 def init_params(floor, floors):
     fl = _floor(floors, floor)
@@ -190,7 +127,6 @@ def init_params(floor, floors):
 
 
 def route_params(floor, path_no, floors):
-    """move_to_target / return_home: карта этажа + номер маршрута."""
     return {'map_no': _floor(floors, floor)['map_no'], 'path_no': int(path_no)}
 
 
@@ -216,10 +152,7 @@ def elv_params(from_floor, to_floor, floors):
             'init_pose_yaw': e['init_pose']['yaw']}
 
 
-# --- рендер и запись ----------------------------------------------------
-
 def render_fragment(kind, params, name='fragment'):
-    """Готовый фрагмент как dict. Файл не пишется."""
     if kind not in FRAGMENTS:
         raise ValueError(f'неизвестный фрагмент {kind}, есть {FRAGMENTS}')
     return render(dict(params, scenario_name=name),
@@ -227,44 +160,27 @@ def render_fragment(kind, params, name='fragment'):
 
 
 def fragment_name(run_id, seq, kind):
-    """run_<run_id>_<NN>_<kind>: по имени в robot_state.scenario_name видно,
-    какой рейс и на каком шаге."""
     return f'{PREFIX}{run_id}_{seq:02d}_{kind}'
 
 
 def generate_fragment(kind, params, run_id, seq, scenario_dir=SCENARIO_DIR):
-    """Записать один фрагмент в каталог робота. Вернуть имя для /scenario_name."""
     name = fragment_name(run_id, seq, kind)
     _write_atomic(scenario_dir, name, render_fragment(kind, params, name))
     return name
 
 
-# --- цепочки (по scenario.drawio) --------------------------------------
-#
-# План — список (kind, params). Сервер идёт по нему, публикуя по одному
-# фрагменту и дожидаясь завершения. У deliver план обрывается на put_down
-# (go_home=False), и после него сервер решает: приклеить collect
-# (from_home=False) или plan_go_home().
-#
-# pickup  = {'floor', 'path_no', 'marker_id'} — где стоит платформа
-# dropoff = {'floor', 'path_no'}              — куда её поставить
-
 def _elv_wait(floor, floors):
-    """Позиция ожидания лифта на этаже (elv_wait_pose_path_no)."""
     return ('move_to_target',
             route_params(floor, _floor(floors, floor)['elv_wait_pose_path_no'], floors))
 
 
 def _transfer(from_floor, to_floor, floors):
-    """Переезд между этажами: холл → лифт. На одном этаже лифт не нужен,
-    но такой рейс на роботе не проверялся."""
     if int(from_floor) == int(to_floor):
         raise NotImplementedError(f'рейс в пределах этажа {from_floor} не поддержан')
     return [_elv_wait(from_floor, floors), ('elv', elv_params(from_floor, to_floor, floors))]
 
 
 def plan_go_home(floor, floors=None):
-    """С любого этажа в HOME. С этажа HOME — только return_home."""
     floors = floors or load_floors()
     hf = home_floor(floors)
     steps = []
@@ -291,16 +207,11 @@ def plan_deliver(pickup, dropoff, floors=None, from_home=True, go_home=True):
 
 
 def plan_collect(pickup, dropoff, floors=None, from_home=True, go_home=True):
-    """Возврат порожней. from_home=False — хвост после put_down доставки:
-    робот уже на этаже pickup, init и переезд не нужны."""
     floors = floors or load_floors()
     steps = []
     if from_home:
         hf = home_floor(floors)
         steps.append(('init', init_params(hf, floors)))
-        # После лифта — сразу к порожней. Заход на elv_wait этажа прибытия был
-        # лишним крюком: выход из лифта и так стоит у дверей, а доставка после
-        # лифта тоже едет прямо на адрес (проверено рейсом deliver_collect).
         steps += _transfer(hf, pickup['floor'], floors)
     steps.append(('pick_up', pickup_params(pickup['floor'], pickup['path_no'],
                                            pickup['marker_id'], floors)))
@@ -313,15 +224,12 @@ def plan_collect(pickup, dropoff, floors=None, from_home=True, go_home=True):
 
 
 def plan_deliver_collect(pickup, dropoff, collect_pickup, collect_dropoff, floors=None):
-    """Полный рейс как press_scenario_4: доставка + возврат порожней."""
     floors = floors or load_floors()
     return (plan_deliver(pickup, dropoff, floors, go_home=False)
             + plan_collect(collect_pickup, collect_dropoff, floors, from_home=False))
 
 
 def generate_chain(plan, run_id=None, scenario_dir=SCENARIO_DIR):
-    """Записать все фрагменты плана. Вернуть имена в порядке публикации.
-    Публиковать по одному, следующее — после завершения предыдущего."""
     if run_id is None:
         run_id = str(int(time.time()))
     return [generate_fragment(kind, params, run_id, seq, scenario_dir)
@@ -329,7 +237,6 @@ def generate_chain(plan, run_id=None, scenario_dir=SCENARIO_DIR):
 
 
 def chain_steps(plan):
-    """Все шаги плана подряд — для сравнения с монолитным сценарием."""
     out = []
     for kind, params in plan:
         out += render_fragment(kind, params)['steps']
@@ -337,8 +244,6 @@ def chain_steps(plan):
 
 
 def cleanup(scenario_dir=SCENARIO_DIR, keep_seconds=24 * 3600):
-    """Удалить старые сгенерированные сценарии. Файлы без префикса run_
-    не трогаются никогда — они лежат в git."""
     now = time.time()
     removed = []
     for f in os.listdir(scenario_dir):

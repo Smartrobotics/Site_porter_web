@@ -30,7 +30,6 @@ from .schemas import (
 setup_logging()
 log = logging.getLogger(__name__)
 
-# 許可するオリジンは docker-compose.yml の CORS_ORIGINS で指定する（カンマ区切り）
 origins = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "https://localhost:5173").split(",") if o.strip()
 ]
@@ -46,7 +45,6 @@ async def lifespan(app: FastAPI):
     log.info("終了します")
 
 
-# app = FastAPI(title="Task API", lifespan=lifespan)
 app = FastAPI(title="SitePorter API", lifespan=lifespan)
 
 app.add_middleware(
@@ -58,13 +56,11 @@ app.add_middleware(
 )
 
 
-# ローカルCAの配布と /setup ページ
 app.include_router(ca_router)
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception(request: Request, exc: Exception):
-    # ここに来る = 想定外のバグ。トレース付きで残す
     log.exception("未処理の例外 %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
@@ -72,10 +68,8 @@ async def unhandled_exception(request: Request, exc: Exception):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-    
 
-# 依頼一覧。エリア名と荷台マーカーは JOIN でここに寄せる。
-# テーブル構造をAPIに漏らさず、フロント側で結合させない（N+1を避ける）
+
 REQUEST_COLUMNS = """
        r.id, r.kind, r.created_by, r.tracking_no, r.item,
        r.receiver_name, r.priority, r.status, r.created_at,
@@ -89,8 +83,6 @@ REQUEST_COLUMNS = """
        rb.step_index, rb.step_total
 """
 
-# 走行中の依頼にだけロボットの現在位置をぶら下げる。
-# ON に status を入れているので、走っていない行では NULL になる。
 REQUEST_FROM_SQL = """
 FROM request r
 JOIN area fa ON fa.id = r.from_area_id
@@ -119,9 +111,6 @@ def list_requests(db: sqlite3.Connection = Depends(get_db)):
     log.debug("依頼一覧を返しました count=%s", len(rows))
     return [dict(row) for row in rows]
 
-
-# ---------------------------------------------------------------- マスタ
-# 画面の選択肢になるデータ。起動時に一度だけ読めばよい。
 
 AREA_LIST_SQL = """
 SELECT id, floor, map_no, label
@@ -195,12 +184,6 @@ def get_request(request_id: int, db: sqlite3.Connection = Depends(get_db)):
 
 @app.post("/api/request", response_model=RequestOut, status_code=201)
 def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_db)):
-    """
-    搬送依頼の受付。必ず受け付ける。
-    搬送先に空き場所がなくても(E7)、ロボットが実行中でも(E9)エラーにせず
-    status='queued' で積む。走らせる判断はエンジン側が毎秒行う。
-    """
-    # 出発の番地は「荷台が今どこにあるか」で決まる。人は選ばない
     rack = db.execute(
         """SELECT rk.id, rk.street_address_id, rk.marker_id,
                   sa.area_id AS rack_area_id, a.label AS rack_area_label
@@ -212,8 +195,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
     ).fetchone()
     if rack is None:
         raise HTTPException(status_code=400, detail="荷台が見つかりません")
-    # 1台の荷台が同時に持てる走行は1つ(E8)。
-    # 搬送中(番地から外れている)でも、順番待ちが入っているでも同じく断る
     busy = db.execute(
         """SELECT id FROM request
            WHERE rack_id = ? AND is_deleted = 0 AND status IN ('queued', 'running')
@@ -226,8 +207,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
             detail="指定された荷台は使用中です。別の荷台を選んでください。",
         )
 
-    # 搬送元は「荷台が今どこにあるか」で決まる。人が選んだエリアと食い違うなら、
-    # 目の前に無い荷台を指定している。DBのトリガーも弾くが、その文面は人に読めない
     if rack["rack_area_id"] is not None and rack["rack_area_id"] != payload.from_area_id:
         raise HTTPException(
             status_code=409,
@@ -237,9 +216,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
             ),
         )
 
-    # 生成器は「HOME の階で荷台を拾う」形しか作れない(init は HOME の階からのみ)。
-    # press_scenario_4/5 もその形だった: 2F で拾って 1F へ、戻りは回収。
-    # 受け付けてから走行開始時に失敗させるより、ここで断ったほうが親切
     home_floor = _home_floor()
     if home_floor is not None and rack["rack_area_id"] is not None:
         floor = db.execute(
@@ -254,7 +230,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
                 ),
             )
 
-    # 送り状番号は二重送信の検査キー。同じ番号が既にあれば受け付けない
     if payload.tracking_no:
         dup = db.execute(
             """SELECT id, created_at, is_deleted FROM request
@@ -262,7 +237,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
             (payload.tracking_no,),
         ).fetchone()
         if dup is not None:
-            # どの依頼が持っているかまで言う。番号だけ言われても人は確認できない
             when = str(dup["created_at"])[:16]
             note = "(取消済み)" if dup["is_deleted"] else ""
             raise HTTPException(
@@ -273,7 +247,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
                 ),
             )
 
-    # 受取人の名前が名簿にあれば紐づける。無くても依頼は通す
     receiver_user_id = None
     if payload.receiver_name:
         user = db.execute(
@@ -304,7 +277,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
                 payload.priority,
             ),
         ).fetchone()
-        # 受付で荷台は「荷あり」になる
         db.execute("UPDATE rack SET is_empty = 0 WHERE id = ?", (payload.rack_id,))
         db.commit()
     except sqlite3.IntegrityError as e:
@@ -318,10 +290,6 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
 
 @app.post("/api/request/{request_id}/confirm", response_model=RequestOut)
 def confirm_receipt(request_id: int, db: sqlite3.Connection = Depends(get_db)):
-    """
-    受取人が荷物を受け取ったことを確認する。
-    ここで荷台は空になり、次の回収の対象になる(docs/siteporter-db.ja.md §11)。
-    """
     row = db.execute(
         "SELECT id, kind, status, rack_id FROM request WHERE id = ? AND is_deleted = 0",
         (request_id,),
@@ -347,11 +315,6 @@ def confirm_receipt(request_id: int, db: sqlite3.Connection = Depends(get_db)):
 def cancel_request(
     request_id: int, payload: CancelIn, db: sqlite3.Connection = Depends(get_db)
 ):
-    """
-    管理者による取消。エレベータ側のキャンセルは別システムなので、ここでは行えない。
-    走行中だった場合は荷台がロボットの下にあるため、番地に戻す判断はしない
-    (どこに置いたか分からないので、荷台配置初期設定で人が直す)。
-    """
     row = db.execute(
         """SELECT id, status, rack_id, from_address_id
            FROM request WHERE id = ? AND is_deleted = 0""",
@@ -374,7 +337,7 @@ def cancel_request(
                WHERE id = ?""",
             (request_id,),
         )
-    else:  # reset
+    else:
         db.execute(
             """UPDATE request SET status = 'queued', assigned_robot_id = NULL,
                                   started_at = NULL, to_address_id = NULL
@@ -382,14 +345,6 @@ def cancel_request(
             (request_id,),
         )
 
-    # 走行中だった場合。
-    # 荷台は出発した番地に戻す。実際にはロボットの下のどこかにあるが、
-    # 番地なしのまま残すとその荷台は二度と選べなくなる(POST が「使用中」で断る)。
-    # 出発地に戻す方が現実に近く、違っていれば荷台配置初期設定で人が直せる。
-    #
-    # ロボットは即座に解放しない。中断はエレベーター動作中に効かないことがあり
-    # (§3.3)、まだ動いている相手に次の断片を投げてしまう。
-    # 実機のときはエンジンが終了状態を待ってから解放する。
     if row["status"] == "running":
         _park_rack(db, row["rack_id"], row["from_address_id"])
         if not request_cancel(request_id):
@@ -402,7 +357,6 @@ def cancel_request(
     log.info("依頼を取消しました id=%s mode=%s", request_id, payload.mode)
 
     if payload.mode == "delete":
-        # is_deleted = 1 なので REQUEST_ONE_SQL では取れない。消える前の姿を返す
         return dict(
             db.execute(
                 REQUEST_ONE_SQL.replace("AND r.is_deleted = 0", ""), (request_id,)
@@ -412,11 +366,6 @@ def cancel_request(
 
 
 def _park_rack(db: sqlite3.Connection, rack_id: int, prefer_address_id: int | None) -> None:
-    """
-    行き先を失った荷台を、どこかの空き番地に置く。
-    まず出発した番地、それが埋まっていれば空いている番地を若い順に。
-    どこも空いていなければ番地なしのまま残す(そのときは人が動かすしかない)。
-    """
     candidates: list[int] = []
     if prefer_address_id is not None:
         candidates.append(prefer_address_id)
@@ -455,7 +404,6 @@ def _rack_out(db: sqlite3.Connection, rack_id: int) -> dict:
 
 
 def _in_transit(db: sqlite3.Connection, rack_id: int) -> bool:
-    """走行中の依頼を持っている荷台。いまロボットの下にあるので動かせない"""
     row = db.execute(
         """SELECT 1 FROM request
            WHERE rack_id = ? AND is_deleted = 0 AND status = 'running' LIMIT 1""",
@@ -488,10 +436,6 @@ def patch_rack(rack_id: int, payload: RackPatch, db: sqlite3.Connection = Depend
 
 @app.put("/api/rack/placement", response_model=list[RackOut])
 def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)):
-    """
-    荷台配置初期設定画面からの一括反映。
-    「どの番地にどの荷台があるか」を画面の内容そのままにする。
-    """
     items = payload.items
     if len({i.rack_id for i in items}) != len(items):
         raise HTTPException(status_code=400, detail="同じ荷台が2回指定されています。")
@@ -519,7 +463,6 @@ def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)
             )
 
     try:
-        # いったん全部どかしてから置き直す。入れ替えでも途中で衝突しない
         for item in items:
             db.execute("UPDATE rack SET street_address_id = NULL WHERE id = ?", (item.rack_id,))
         for item in items:
@@ -530,7 +473,6 @@ def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)
         db.commit()
     except sqlite3.IntegrityError:
         db.rollback()
-        # 画面に出ていない荷台がその番地にいる場合(画面が古い)
         raise HTTPException(
             status_code=409,
             detail="指定した番地に別の荷台があります。画面を更新してからやり直してください。",
@@ -543,10 +485,6 @@ def put_placement(payload: PlacementIn, db: sqlite3.Connection = Depends(get_db)
 
 @app.get("/api/robot", response_model=RobotOut)
 def get_robot(db: sqlite3.Connection = Depends(get_db)):
-    """
-    ロボットの現在の様子。設定画面が読むだけで、ここから操作はしない。
-    ロボットを動かすのはエンジンの仕事。
-    """
     row = db.execute(
         """SELECT rb.id, rb.name, rb.phase, rb.scenario_name,
                   rb.step_index, rb.step_total, rb.floor, rb.stuck_reason, rb.pause_reason,
@@ -557,19 +495,11 @@ def get_robot(db: sqlite3.Connection = Depends(get_db)):
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="ロボットが登録されていません")
-    # サーバーの現在時刻。画面はこれと自分の時計の差を取り、ロボットの stamp を
-    # 自分の時計に直してから経過時間を出す。ロボット本体の時計は NTP が無く
-    # 実時刻から何分もずれることがある(2026-09-16: +12.5 分)
     return {**dict(row), "mode": ROBOT_MODE, "server_now": datetime.now(timezone.utc).isoformat()}
 
 
 @app.post("/api/robot/reset_home", response_model=RobotOut)
 def reset_robot_home(db: sqlite3.Connection = Depends(get_db)):
-    """
-    人がロボットを HOME に置き直した後に押す。
-    HOME へ戻れなかった(stuck_reason)、あるいは失敗の後で at_home が 0 のまま、
-    という状態をここで正す。走行中の依頼があるときは断る — 先に取消する。
-    """
     running = db.execute(
         "SELECT id FROM request WHERE status = 'running' AND is_deleted = 0 LIMIT 1"
     ).fetchone()
@@ -588,13 +518,12 @@ def reset_robot_home(db: sqlite3.Connection = Depends(get_db)):
 
 
 def _home_floor() -> int | None:
-    """ロボットの待機階。floors.json の home を持つ階"""
     try:
         from .scenario import load_floors
 
         for key, fl in load_floors()["floors"].items():
             if "home" in fl:
                 return int(key)
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("floors.json から待機階を読めませんでした")
     return None

@@ -1,9 +1,3 @@
-"""ローカルCA（mkcert）の配布。
-
-スマホに証明書を入れる前は https:// 側が信頼されていないため、
-このエンドポイントは **backend の http://<IP>:8000 で開くこと** を前提にしている。
-"""
-
 import logging
 import os
 from pathlib import Path
@@ -13,9 +7,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 CA_DIR = Path(os.getenv("CA_DIR", "/ca"))
 
-# 配布してよいファイルのホワイトリスト。
-# パスを組み立てる前にここで照合するので、../ のような指定は通らない。
-# 秘密鍵（rootCA-key.pem）は絶対に含めない。
 CA_FILES = {
     "rootCA.pem": "application/x-x509-ca-cert",
     "rootCA.crt": "application/x-x509-ca-cert",
@@ -51,7 +42,6 @@ def ca_file(filename: str):
             detail="証明書が置かれていません。README の「CAをスマホに渡す」を参照してください。",
         )
 
-    # attachment だと iOS がプロファイルとして扱わずファイル保存になることがあるため inline
     log.info("証明書を配布しました file=%s", filename)
     return FileResponse(
         path,
@@ -62,7 +52,6 @@ def ca_file(filename: str):
 
 @router.get("/setup", response_class=HTMLResponse)
 def setup_page(request: Request):
-    """スマホで開く証明書インストール用のページ。"""
     host = request.url.hostname
     app_url = f"https://{host}:5173"
 
