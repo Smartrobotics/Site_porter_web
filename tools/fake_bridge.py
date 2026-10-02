@@ -200,22 +200,22 @@ def main():
 
     Handler.bridge = Bridge(opts)
     server = ThreadingHTTPServer((opts.host, opts.port), Handler)
-    print(f'fake scenario_bridge на http://{opts.host}:{opts.port}', flush=True)
-    print(f'  шаг {opts.step_seconds} с, всего {len(ACTIONS)} шагов на фрагмент', flush=True)
+    print(f'fake scenario_bridge on http://{opts.host}:{opts.port}', flush=True)
+    print(f'  step {opts.step_seconds} s, {len(ACTIONS)} steps per fragment', flush=True)
     if opts.ros_down:
         print('  ros_ok=false', flush=True)
     if opts.fail_at is not None:
-        print(f'  FAILURE на шаге {opts.fail_at}', flush=True)
+        print(f'  FAILURE at step {opts.fail_at}', flush=True)
     if opts.hang:
-        print('  зависание вместо завершения', flush=True)
+        print('  hangs instead of finishing', flush=True)
     if opts.die_after is not None:
-        print(f'  замолчит через {opts.die_after} с', flush=True)
+        print(f'  goes silent after {opts.die_after} s', flush=True)
     if opts.cancel_delay:
-        print(f'  отмена подействует через {opts.cancel_delay} с', flush=True)
+        print(f'  cancel takes effect after {opts.cancel_delay} s', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print('\nостановлен', flush=True)
+        print('\nstopped', flush=True)
         return 0
 
 
