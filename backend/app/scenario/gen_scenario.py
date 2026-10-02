@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import argparse
 import json
 import os
 import re
@@ -9,7 +5,6 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE = os.path.join(HERE, 'template_roundtrip.json')
 
 SCENARIO_DIR = os.getenv('SCENARIO_DIR', '/scenarios')
 
@@ -32,7 +27,7 @@ def _substitute(node, params):
     return node
 
 
-def render(params, template=TEMPLATE):
+def render(params, template):
     with open(template, encoding='utf-8') as f:
         tpl = json.load(f)
     out = _substitute(tpl, params)
@@ -55,25 +50,6 @@ def _find_placeholders(node, acc=None):
         if m:
             acc.add(m.group(1))
     return acc
-
-
-def generate(pickup_marker, pickup_path_no, dropoff_path_no,
-             return_pickup_path_no, return_marker, return_dropoff_path_no,
-             scenario_dir=SCENARIO_DIR, name=None, template=TEMPLATE):
-    if name is None:
-        name = f'{PREFIX}{int(time.time())}'
-    params = {
-        'scenario_name': name,
-        'pickup_marker': int(pickup_marker),
-        'pickup_path_no': int(pickup_path_no),
-        'dropoff_path_no': int(dropoff_path_no),
-        'return_pickup_path_no': int(return_pickup_path_no),
-        'return_marker': int(return_marker),
-        'return_dropoff_path_no': int(return_dropoff_path_no),
-    }
-    data = render(params, template)
-    _write_atomic(scenario_dir, name, data)
-    return name
 
 
 def _write_atomic(scenario_dir, name, data):
@@ -254,47 +230,3 @@ def cleanup(scenario_dir=SCENARIO_DIR, keep_seconds=24 * 3600):
             os.unlink(p)
             removed.append(f)
     return removed
-
-
-def main():
-    ap = argparse.ArgumentParser(description='SitePorter: generate a scenario for the robot')
-    ap.add_argument('--pickup-marker', type=int, required=True,
-                    help='marker of the rack to pick up on 2F')
-    ap.add_argument('--pickup-path', type=int, required=True,
-                    help='path_no of the spot that rack stands on, on 2F')
-    ap.add_argument('--dropoff-path', type=int, required=True,
-                    help='path_no of the drop-off spot on 1F')
-    ap.add_argument('--return-pickup-path', type=int, required=True,
-                    help='path_no of the spot the empty rack is picked up from on 1F')
-    ap.add_argument('--return-marker', type=int, required=True,
-                    help='marker of the empty rack')
-    ap.add_argument('--return-dropoff-path', type=int, required=True,
-                    help='path_no of the 2F spot the empty rack is put down at')
-    ap.add_argument('--name', help='scenario name (defaults to run_<timestamp>)')
-    ap.add_argument('--scenario-dir', default=SCENARIO_DIR)
-    ap.add_argument('--dry-run', action='store_true', help='print the JSON without writing')
-    a = ap.parse_args()
-
-    params = {
-        'scenario_name': a.name or f'{PREFIX}dryrun',
-        'pickup_marker': a.pickup_marker,
-        'pickup_path_no': a.pickup_path,
-        'dropoff_path_no': a.dropoff_path,
-        'return_pickup_path_no': a.return_pickup_path,
-        'return_marker': a.return_marker,
-        'return_dropoff_path_no': a.return_dropoff_path,
-    }
-    if a.dry_run:
-        print(json.dumps(render(params), ensure_ascii=False, indent=4))
-        return
-
-    name = generate(a.pickup_marker, a.pickup_path, a.dropoff_path,
-                    a.return_pickup_path, a.return_marker, a.return_dropoff_path,
-                    scenario_dir=a.scenario_dir, name=a.name)
-    print(name)
-    print(f'  file: {os.path.join(a.scenario_dir, name + ".json")}')
-    print(f'  run:  rostopic pub -1 /scenario_name std_msgs/String "data: \'{name}\'"')
-
-
-if __name__ == '__main__':
-    main()

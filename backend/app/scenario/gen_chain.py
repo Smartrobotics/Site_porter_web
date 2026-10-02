@@ -3,7 +3,6 @@
 
 import argparse
 import json
-import os
 
 from gen_scenario import (SCENARIO_DIR, generate_chain, load_floors,
                           plan_collect, plan_deliver, plan_deliver_collect,
