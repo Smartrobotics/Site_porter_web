@@ -4,14 +4,8 @@ import { useStore } from '../domain/store'
 import { areaLabel } from '../domain/master'
 import { IconCheck, IconClose } from './icons'
 
-/** 画面上部に出しておく秒数。触らなければこの後に消える */
 const SHOW_MS = 8_000
 
-/**
- * 荷物が届いたことを知らせる帯。画面の上に出る。
- * 触れば通知画面へ、×で閉じる、触らなければ SHOW_MS 後に消える。どれでも「知らせた」扱い。
- * ポーリングで「届いた・未確認」の依頼を見つけたら、どの画面にいても1回出す。
- */
 export function ArrivalModal() {
   const navigate = useNavigate()
   const { arrival, dismissArrival, master } = useStore()
@@ -20,7 +14,6 @@ export function ArrivalModal() {
     if (!arrival) return
     const id = window.setTimeout(dismissArrival, SHOW_MS)
     return () => window.clearTimeout(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arrival?.id])
 
   if (!arrival) return null

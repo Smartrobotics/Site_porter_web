@@ -3,7 +3,6 @@ interface LogoProps {
   showWord?: boolean
 }
 
-/** サイトポーター ワードマーク + 三色幾何学シンボル(自作SVG) */
 export function Logo({ size = 30, showWord = true }: LogoProps) {
   return (
     <div className="logo">

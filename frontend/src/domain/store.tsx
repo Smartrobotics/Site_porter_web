@@ -27,7 +27,6 @@ import {
 import { toTask, type RequestRaw } from './mapping'
 import { fetchWithTimeout } from '../lib/http'
 
-/** GET /api/robot。ロボットを動かすのはサーバー。画面は読むだけ */
 export interface RobotState {
   id: number
   name: string
@@ -35,15 +34,10 @@ export interface RobotState {
   scenarioName: string | null
   stepIndex: number | null
   stepTotal: number | null
-  /** いま走っている依頼 */
   requestId: number | null
-  /** mock = ロボット無しで時間だけ進む。docker-compose.yml の ROBOT_MODE で決まる */
   mode: string
-  /** ロボットがいる階(エレベーター断片の完了で更新) */
   floor: number | null
-  /** 人の手が要る理由。null なら不要。入っている間サーバーは新しい走行を始めない */
   stuckReason: string | null
-  /** 走行中の一時停止の理由。"emergency stop" = 非常停止中。通常は null */
   pauseReason: string | null
 }
 
@@ -75,34 +69,20 @@ export function robotPhaseLabel(phase: string): string {
 }
 
 const STORAGE_KEY = 'siteporter.state.v4'
-/** 搬送状況のポーリング間隔 */
 const POLL_MS = 3000
 
-/**
- * localStorage に残すのは端末ごとの事情だけ。
- * 依頼・荷台・エリアはサーバーが持つ唯一の正しい値なので保存しない。
- */
 interface PersistState {
-  /** 現在地。壁QRで読んだエリア */
   currentAreaId?: number
-  /**
-   * この端末を使っている受取人の user.id。個人リンク(?user_id=N)で開いたときに入る。
-   * 到着の知らせをこの人宛だけに絞る。無ければ全員分(配送員の端末)
-   */
   viewerUserId?: number
-  /** 到着の知らせをもう見せた依頼の id。同じ依頼で二度出さない */
   announcedIds: number[]
 }
 
-/** 画面遷移時にサーバーと通信できなかったときの共通メッセージ */
 export const SCREEN_LOAD_ERROR = 'サーバと通信できませんでした。時間をおいて再度お試しください。'
 
-/** 依頼の内容をサーバーが受け付けなかった(422)。画面の検証をすり抜けた場合だけ */
 export const INVALID_REQUEST_MESSAGE = '依頼の内容が正しくありません。入力を確認してください。'
-/** サーバー側の障害(500 など)。届いてはいるが処理できなかった */
+
 export const SERVER_FAULT_MESSAGE = 'サーバーでエラーが発生しました。時間をおいて再度お試しください。'
 
-/** サーバーに届かなかった(タイムアウト・502/503/504) */
 export const SERVER_UNREACHABLE_MESSAGE = 'サーバーに接続できませんでした。時間をおいて再度お試しください。'
 
 const initialState: PersistState = {
@@ -133,7 +113,6 @@ function reducer(state: PersistState, action: Action): PersistState {
     case 'SET_VIEWER_USER':
       return { ...state, viewerUserId: action.userId }
     case 'MARK_ANNOUNCED': {
-      // 増え続けないよう直近 200 件だけ残す
       const merged = Array.from(new Set([...state.announcedIds, ...action.ids]))
       return { ...state, announcedIds: merged.slice(-200) }
     }
@@ -150,50 +129,32 @@ export interface Toast {
 }
 
 interface StoreContextValue extends PersistState {
-  /** サーバーから取得したマスタ */
   master: Master
   areas: Area[]
   addresses: Address[]
   racks: Rack[]
   users: User[]
   masterLoaded: boolean
-  /** 搬送依頼。サーバーが唯一の正しい値。ポーリングで取り直す */
   tasks: TransportTask[]
-  /** ロボットの現在の様子。取得できていなければ null */
   robot: RobotState | null
-  /**
-   * 端末の時計 − サーバーの時計(ms)。サーバーから来る時刻(ロボットの stamp など)を
-   * 端末の時計に直すときに足す。ロボット本体には NTP が無く何分もずれることがある
-   */
   clockOffsetMs: number
-  /** 現在地のエリア(未設定/未登録なら undefined。E1-2 / E1-3) */
   currentArea: Area | undefined
   toasts: Toast[]
-  /** 受取確認が済んでいない搬送の件数(通知タブのバッジ) */
   pendingReceiptCount: number
-  // actions
   setCurrentArea: (areaId?: number) => void
-  /** 個人リンクで開いた受取人を覚える */
   setViewerUser: (userId?: number) => void
-  /** 届いたばかりで、まだこの端末で知らせていない荷物。モーダルに出す */
   arrival: TransportTask | null
   dismissArrival: () => void
-  /** 荷台のマーカーIDを付け替える */
   setRackMarker: (rackId: number, markerId: number) => Promise<void>
-  /** 荷台配置をまとめて反映する。1台ずつだと入れ替えが途中で衝突する */
   savePlacement: (items: { rackId: number; addressId: number }[]) => Promise<void>
-  /** 画面遷移時の取得に失敗した(共通モーダルを出す) */
   screenError: string | null
   reportScreenLoadFailed: () => void
   dismissScreenError: () => void
-  /** 最後にポーリングが成功した時刻。失敗しても更新しない(E10) */
   lastFetchedAt: number
   startTransport: (req: TransportRequest) => Promise<number>
   cancelTask: (id: number) => Promise<void>
-  /** 人がロボットを HOME に置き直したと申告する。stuck を解除し at_home を立てる */
   resetRobotHome: () => Promise<void>
   cancelRequest: (id: number, mode: 'delete' | 'reset') => Promise<void>
-  /** 受取人が荷物を受け取ったことを確認する */
   confirmReceipt: (taskId: number) => void
   dismissToast: (id: string) => void
 }
@@ -204,12 +165,6 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 }
 
-/**
- * 失敗したらモーダルに出す文面を投げる。
- *   サーバーに届かない(時間切れ・接続失敗・proxy の 502/503/504) … E6 の文面
- *   サーバーが断った(400 系など、detail 付き)                      … その文面(E8 など)
- * 「/api/request: 8000ms 以内に応答がありません」のような内部の文言は人に見せない
- */
 async function send(path: string, body?: unknown): Promise<RequestRaw> {
   let res: Response
   try {
@@ -226,9 +181,6 @@ async function send(path: string, body?: unknown): Promise<RequestRaw> {
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    // detail が文字列 … サーバーが理由を書いた(E8 など)。そのまま見せる
-    // detail が配列   … 入力検証(422)。項目ごとの英語の羅列なので人向けに言い換える
-    // それ以外        … 500 など。サーバーの障害
     if (data && typeof data.detail === 'string') throw new Error(data.detail)
     if (res.status === 422) throw new Error(INVALID_REQUEST_MESSAGE)
     throw new Error(SERVER_FAULT_MESSAGE)
@@ -244,9 +196,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [raws, setRaws] = useState<RequestRaw[]>([])
   const [robot, setRobot] = useState<RobotState | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  // ポーリングが最後に成功した時刻。失敗しても更新しない(E10)
   const [lastFetchedAt, setLastFetchedAt] = useState(Date.now())
-  // 画面遷移時の取得失敗。ポーリング断(E10)と違い、こちらは黙らずに知らせる
   const [screenError, setScreenError] = useState<string | null>(null)
 
   const pushToast = (t: Omit<Toast, 'id'>) => {
@@ -259,13 +209,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id))
 
-  /**
-   * 依頼と荷台を取り直す。成功したときだけ時刻を進める。
-   *
-   * 荷台も毎回取る。走行ごとに置き場所が変わるので、開いたときの1回では
-   * すぐ古くなる。古い位置で「この荷台は別のエリアにあります」と止めてしまう。
-   * エリア・番地・受取人は動かないので、こちらは起動時の1回だけ。
-   */
   const refresh = useCallback(async () => {
     try {
       const [reqRes, rackRes, robotRes] = await Promise.all([
@@ -300,11 +243,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
       setLastFetchedAt(Date.now())
     } catch {
-      // E10: ポーリング断はエラーを出さない。取得時刻が止まることで人に伝わる
     }
   }, [])
 
-  // マスタの取得。起動時に一度だけ
   useEffect(() => {
     let cancelled = false
     const get = async (path: string) => {
@@ -338,19 +279,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // 搬送状況のポーリング
   useEffect(() => {
     void refresh()
     const t = setInterval(() => void refresh(), POLL_MS)
     return () => clearInterval(t)
   }, [refresh])
 
-  // 永続化
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
-      /* ignore quota errors */
     }
   }, [state])
 
@@ -362,9 +300,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [raws, master],
   )
 
-  // 到着の知らせ。ポーリングで「届いた・未確認」になった依頼のうち、
-  // この端末でまだ知らせていないものを1件モーダルに出す(通知タブへ行かなくても気付ける)。
-  // 受取人の端末(viewerUserId あり)には自分宛だけ、配送員の端末には全部
   const [arrival, setArrival] = useState<TransportTask | null>(null)
   useEffect(() => {
     if (arrival) return
@@ -454,8 +389,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })()
   }
 
-  // 回収は受取確認の対象外(荷台回収完了の通知は出さない)。
-  // 個人リンクで開いた端末は、通知画面と同じくその人宛だけを数える
   const viewerName =
     state.viewerUserId !== undefined ? master.users.find((u) => u.id === state.viewerUserId)?.name : undefined
   const pendingReceiptCount = tasks.filter(

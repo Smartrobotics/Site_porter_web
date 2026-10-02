@@ -1,26 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-scenario_bridge の代わり。ロボットも ROS も無い机の上で、サーバー側の
-ChainRunner を通しで動かすためのもの。
-
-docs/siteporter-bridge-api.ja.md の §3 の3つの口をそのまま実装している。
-中身は ROS ではなくタイマー。サーバーから見ると本物と区別がつかないので、
-engine.py の bridge モードはこれで完全に確認できる。
-
-標準ライブラリだけ。flask も rospy も要らない。
-
-    python3 tools/fake_bridge.py                    # 普通に動く
-    python3 tools/fake_bridge.py --step-seconds 1   # 速く
-    python3 tools/fake_bridge.py --fail-at 2        # 異常系A: step 2 で FAILURE
-    python3 tools/fake_bridge.py --hang             # 異常系C: 終わらない
-    python3 tools/fake_bridge.py --ros-down         # ros_ok:false（ブリッジは生きている）
-    python3 tools/fake_bridge.py --die-after 20     # 異常系B: 20秒後に応答を止める
-    python3 tools/fake_bridge.py --cancel-delay 10  # 取消を受けても10秒間止まらない
-                                                   # （エレベーター動作中の再現。§3.3）
-
-停止は Ctrl+C。
-"""
 
 import argparse
 import json
@@ -35,7 +14,6 @@ from pathlib import Path
 JST = timezone(timedelta(hours=9))
 NAME_RE = re.compile(r'^[A-Za-z0-9_.\-]+$')
 
-# 本物の断片が踏むステップに似せた名前。数だけ合っていれば十分
 ACTIONS = ['init_pose', 'set_goal_elv', 'elv_call_floor', 'marker_dock', 'lift_down']
 
 
@@ -90,12 +68,9 @@ class Bridge:
         threading.Thread(target=self._run, args=(name, total), daemon=True).start()
 
     def _run(self, name, total):
-        # 本物のエンジンはステップが変わったときだけ publish する。同じ振る舞いにする
         for index in range(total):
             for _ in range(int(self.opts.step_seconds * 10)):
                 if self.cancel_flag:
-                    # エレベーター動作中は中断判定が無効で、動作が終わるまで
-                    # 止まらない(§3.3)。--cancel-delay がその窓を再現する
                     if self.cancel_at is not None:
                         left = self.opts.cancel_delay - (time.time() - self.cancel_at)
                         if left > 0:

@@ -1,9 +1,5 @@
 import { useStore } from '../domain/store'
 
-/**
- * 画面遷移時にサーバーと通信できなかったときの共通モーダル。
- * どの画面でも同じ見た目・同じ文言で出す。
- */
 export function ScreenErrorModal() {
   const { screenError, dismissScreenError } = useStore()
   if (!screenError) return null

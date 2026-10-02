@@ -1,14 +1,4 @@
-/**
- * @mobi が返す生のステータス値と、その日本語表記。
- * scenario_bridge.py が state を返し始めたら 搬送状況画面 の rawState 行に出る。
- */
-/**
- * @mobi (atmobi) API の状態値定義。
- * enum は tsconfig の erasableSyntaxOnly と相性が悪いため、
- * const オブジェクト + ラベルマップで表現する(値の意味は同一)。
- */
 
-/** GET /state の state 値 (0〜23) */
 export const AtmobiState = {
   IDLE: 0,
   INITIALIZING: 1,
@@ -65,7 +55,6 @@ export const ATMOBI_STATE_LABEL: Record<number, string> = {
   23: 'シャットダウン',
 }
 
-/** GET /navi/status の navi_status 値 (0〜11) */
 export const NaviStatus = {
   UNKNOWN: 0,
   ACTIVE: 1,

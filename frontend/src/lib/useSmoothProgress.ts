@@ -1,17 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 
-/**
- * 段になった進み(断片ごとに 100/step_total ずつ跳ぶ)を、なめらかな値に直す。
- *
- * サーバーが返すのは「いま何番目の断片か」だけなので、そのまま描くと
- * ロボットは20秒に1回、6分の1ずつ飛ぶ。ここでは
- *   - 断片の中では、次の段の手前(CEILING)まで一定速度で進める
- *   - 1断片にかかる時間は、直前の段が変わるまでにかかった時間から学ぶ
- *     (最初は DEFAULT_STEP_MS。mock の MOCK_SECONDS_PER_STEP と合わせてある)
- *   - サーバーの値が先に進んだら CATCH_UP_MS で追いつく
- *   - サーバーの値より先には決して行かない(段の手前で待つ)
- * 走行中でなければ補間せず、サーバーの値をそのまま返す。
- */
 const DEFAULT_STEP_MS = 20_000
 const MIN_STEP_MS = 3_000
 const MAX_STEP_MS = 600_000

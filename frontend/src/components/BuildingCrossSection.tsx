@@ -26,31 +26,6 @@ function levelOf(label: string): number {
   return m ? parseInt(m[0], 10) : 1
 }
 
-/**
- * エレベーター断片(backend/app/scenario/fragments/elv.json)の中の位置。
- * 番号はその JSON の steps の並び。名前だけでは足りない:
- * set_goal_elv / start_elv_goal_controller / elv_get_on_off_flag は乗るときと降りるときの2回出る。
- *
- *   点1 = elv_wait(呼び出し待ち)   点2 = 扉の前   点3 = リフトの中(出発階)
- *   点4 = リフトの中(到着階)        点5 = 扉の前(到着階)   点6 = elv_wait(到着階、通らない)
- *
- * ロボットが実際に動くアクションのときだけ動かす。設定や確認のアクションでは止まっている:
- *   0 elv_call_floor              点1 で待つ
- *   1 set_route_no                点1
- *   2 start_navigation            点1 → 点2
- *   3 set_goal_elv                点2
- *   4 start_elv_goal_controller   点2 → 点3
- *   5 elv_boarding_check_enter    点3
- *   6 elv_get_on_off_flag         点3 → 点4(リフトが動く。時間で進める)
- *   7 set_goal_elv                点4
- *   8 start_elv_goal_controller   点4 → 点5
- *   9 elv_boarding_check_exit     点5
- *   10 elv_get_on_off_flag / 11 set_map / 12 set_robot_position   点5
- *
- * 動く区間の中の進みはサーバーからは来ない(アクションが変わった時だけ分かる)ので、
- * アクションが変わってからの経過時間を目安の所要時間で割って進める。
- * 次のアクションが来る前に着いてしまわないよう 92% で止める。
- */
 type WP = 1 | 2 | 3 | 4 | 5
 interface Leg {
   from: WP
@@ -75,20 +50,16 @@ const ELV_LEG_BY_INDEX: Leg[] = [
   { from: 5, to: 5, seconds: 0 }, // 12 set_robot_position
 ]
 
-/** 廊下の走行(move_to_target の start_navigation)の目安の所要時間(秒) */
-const CORRIDOR_SECONDS = 32 // 実測 26〜32s(HOME→荷台 32、荷台→elv_wait 29、リフト→荷台 26)
-/** 荷台の下から出る/入る move_forward_time */
-const MOVE_FORWARD_SECONDS = 15 // 実測 10〜14s(move_forward_time は短縮済み)
-/** そのときの見た目のずれ(px)。荷台の位置から廊下側へ少し出る */
-const MOVE_FORWARD_SHIFT = 14
 
+const CORRIDOR_SECONDS = 32 
+const MOVE_FORWARD_SECONDS = 15 
+const MOVE_FORWARD_SHIFT = 14
 const LEG_CEILING = 0.92
 
 function elvLeg(action: string | undefined, actionIndex: number | undefined): Leg {
   if (actionIndex !== undefined && actionIndex >= 0 && actionIndex < ELV_LEG_BY_INDEX.length) {
     return ELV_LEG_BY_INDEX[actionIndex]
   }
-  // 番号が無い(古いデータ)ときは名前で最善を尽くす。2回出るものは前半扱い
   switch (action) {
     case 'start_navigation':
       return ELV_LEG_BY_INDEX[2]
@@ -109,13 +80,6 @@ function elvLeg(action: string | undefined, actionIndex: number | undefined): Le
   }
 }
 
-/**
- * アクションが始まってからの経過で 0〜LEG_CEILING を返す。
- *
- * 開始時刻はサーバーが持つブリッジの stamp(since)を使う。画面を開き直しても、
- * 3 秒のポーリングで気付くのが遅れても、同じ位置になる。
- * since が無いときだけ「区間が変わったのに気付いた時刻」から数える。
- */
 function useLegClock(key: string, seconds: number, since?: number): number {
   const noticedRef = useRef<{ key: string; at: number }>({ key, at: Date.now() })
   const compute = () => {
@@ -136,16 +100,6 @@ function useLegClock(key: string, seconds: number, since?: number): number {
   return seconds <= 0 ? 0 : t
 }
 
-/**
- * 目標の位置へ、速度の上限を守りながら寄せる。
- *
- * 画面は 3 秒ごとにサーバーを読む。区間が短い(5 秒のリフトなど)と、気付いた時点で
- * 目標はもう区間の半ばにあり、そこへ一気に寄せると瞬間移動に見える。
- * そこで表示位置は 1 秒に maxSpeed px までしか進まない。maxSpeed は
- * 「その区間の見た目の速度 × 1.5」なので、遅れは少しずつ取り戻し、飛ばない。
- * 目標が戻ることは無い(同じ依頼の中では s は単調)ので、戻ったときは
- * 依頼が変わったとみなして即座に合わせる。
- */
 function useEased(target: number, maxSpeed: number): number {
   const [shown, setShown] = useState(target)
   const shownRef = useRef(target)
@@ -157,13 +111,13 @@ function useEased(target: number, maxSpeed: number): number {
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
-      const dt = Math.min(0.5, (now - last) / 1000) // タブが裏に回っていた分は飛ばさない
+      const dt = Math.min(0.5, (now - last) / 1000)
       last = now
       const t = targetRef.current
       const cur = shownRef.current
       let next = cur
       if (t < cur) {
-        next = t // 依頼が変わった: 戻るときだけ即座に
+        next = t 
       } else if (t > cur) {
         next = Math.min(t, cur + speedRef.current * dt)
       }
@@ -179,24 +133,6 @@ function useEased(target: number, maxSpeed: number): number {
   return shown
 }
 
-/**
- * 建物断面の簡易イラスト。
- * 荷台ロボットが搬送元階→エレベーター→搬送先階を移動する様子を描く。
- *
- * 位置は「経路上の距離 s」ひとつで持つ。経路は
- *   荷台(出発階) → 点1 → 点2 → 点3 → 点4 → 点5 → 荷台(到着階)
- * の折れ線で、s はその上の px。断片とアクションから s を決め、
- * 同じ依頼の中では s を決して戻さない(前回より小さくなったら前回の値を使う)。
- * 区間の終わりまで来てからアクションがまだ続いていても、
- * 次のアクションで「区間の始点」に飛び戻ることが無いようにするため。
- *
- *   init / pick_up      … 出発階の荷台。move_forward_time で荷台から少し出る
- *   move_to_target      … start_navigation の間に荷台→点1、到着階なら点5→荷台の手前
- *   elv                 … 6点をアクションに従って進む(動くアクションの間だけ)
- *   put_down            … move_forward_time で荷台の手前→荷台
- *   return_home         … 到着階の荷台
- * 動いている区間の中の進みはアクションが変わってからの経過時間で出す。
- */
 export function BuildingCrossSection({
   taskId,
   fromLabel,
@@ -215,22 +151,18 @@ export function BuildingCrossSection({
   const toLevel = levelOf(toLabel)
   const goingUp = toLevel > fromLevel
 
-  // 上段/下段スラブ座標
   const TOP_Y = 44
   const BOT_Y = 128
   const fromY = goingUp ? BOT_Y : TOP_Y
   const toY = goingUp ? TOP_Y : BOT_Y
-  const shaftX = 251 // リフトの中央(シャフトは x=236〜266)
-  // HOME → 荷台 の区間は 30 秒かかるのに、以前は 16px しか無かった。
-  // 0.5px/s は画面では「2 秒に 1px 飛ぶ」ようにしか見えない。区間を長く取る
-  const startX = 110 // 荷台の位置
-  const HOME_X = 40 // 出発階の HOME。init はここから始まる
-  const WAIT_X = 190 // 点1 / 点6: elv_wait
-  const DOOR_X = 222 // 点2 / 点5: 扉の前
+  const shaftX = 251 
+  const startX = 110 
+  const HOME_X = 40 
+  const WAIT_X = 190 
+  const DOOR_X = 222 
 
   const p = Math.max(0, Math.min(100, progress))
 
-  // 経路の折れ線と、その上の目印の距離
   const route = [
     { x: HOME_X, y: fromY }, // HOME(出発階)
     { x: startX, y: fromY }, // 荷台(出発階)
@@ -248,9 +180,8 @@ export function BuildingCrossSection({
     cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y))
   }
   const TOTAL = cum[cum.length - 1]
-  // 目印: HOME → (init で少し出る) → 荷台 → (荷台から出る) → 点1 … 点5 → 荷台の手前 → 荷台
   const S_HOME = 0
-  const S_INIT_OUT = MOVE_FORWARD_SHIFT // init の move_forward_time で HOME から少し出た所
+  const S_INIT_OUT = MOVE_FORWARD_SHIFT 
   const S_RACK_FROM = cum[1]
   const S_OUT = S_RACK_FROM + MOVE_FORWARD_SHIFT
   const S_WP = (n: WP) => cum[n + 1]
@@ -274,8 +205,6 @@ export function BuildingCrossSection({
   const isElv = fragmentKind === 'elv'
   const isCorridor = fragmentKind === 'move_to_target'
   const atRack = fragmentKind === 'init' || fragmentKind === 'pick_up' || fragmentKind === 'put_down'
-  // 動くアクション: start_navigation(廊下・HOME から荷台へ)、
-  // move_forward_time(HOME で少し出る・荷台の下から出る/入る)。ほかは止まっている
   const moving =
     ((isCorridor || fragmentKind === 'pick_up') && action === 'start_navigation') ||
     (atRack && action === 'move_forward_time')
@@ -286,41 +215,38 @@ export function BuildingCrossSection({
         to: 1,
         seconds: !moving ? 0 : action === 'move_forward_time' ? MOVE_FORWARD_SECONDS : CORRIDOR_SECONDS,
       }
-  // 区間の鍵: 断片番号 + アクション番号。どちらかが変われば計り直す
+
   const legKey = `${fragmentKind ?? ''}:${fragmentSeq ?? 0}:${actionIndex ?? action ?? ''}`
   const legT = useLegClock(legKey, leg.seconds, actionSince)
 
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
-  // いまの断片とアクションから、経路上の距離 s を出す
   const robotOnToFloor = robotFloor !== undefined && robotFloor === toLevel && toLevel !== fromLevel
   let s: number
   if (fragmentKind && stepTotal) {
     switch (fragmentKind) {
       case 'init':
-        // HOME。move_forward_time で少しだけ前へ出る
         s = robotOnToFloor ? S_RACK_TO : lerp(S_HOME, S_INIT_OUT, legT)
         break
       case 'pick_up':
-        // start_navigation で HOME から荷台へ、move_forward_time で荷台の下から出る
         s = robotOnToFloor
           ? S_RACK_TO
           : action === 'start_navigation'
             ? lerp(S_INIT_OUT, S_RACK_FROM, legT)
             : action === 'move_forward_time'
               ? lerp(S_RACK_FROM, S_OUT, legT)
-              : S_INIT_OUT // 着く前(set_route_no)はまだ HOME 側。着いた後は「戻らない」で荷台に留まる
+              : S_INIT_OUT 
         break
       case 'move_to_target':
         s = robotOnToFloor
-          ? lerp(S_WP(5), S_IN, legT) // 点5 → 荷台の手前
-          : lerp(S_OUT, S_WP(1), legT) // 荷台のすぐ外 → 点1
+          ? lerp(S_WP(5), S_IN, legT) 
+          : lerp(S_OUT, S_WP(1), legT) 
         break
       case 'elv':
         s = leg.seconds > 0 ? lerp(S_WP(leg.from), S_WP(leg.to), legT) : S_WP(leg.from)
         break
       case 'put_down':
-        s = lerp(S_IN, S_RACK_TO, legT) // 荷台の手前 → 荷台
+        s = lerp(S_IN, S_RACK_TO, legT) 
         break
       case 'return_home':
         s = S_RACK_TO
@@ -329,19 +255,15 @@ export function BuildingCrossSection({
         s = S_RACK_FROM
     }
   } else {
-    // 断片が分からない(完了・順番待ち・モックの旧データ)ときは進みだけで描く
     s = (p / 100) * TOTAL
   }
   if (phase === 'completed') s = S_RACK_TO
 
-  // 同じ依頼の中では戻らない。依頼が変わったら計り直す
   const maxRef = useRef<{ key: number | string; s: number }>({ key: taskId, s: 0 })
   if (maxRef.current.key !== taskId) maxRef.current = { key: taskId, s: 0 }
   if (s < maxRef.current.s) s = maxRef.current.s
   else maxRef.current.s = s
 
-  // 目標 s へ寄せる速度の上限(px/s)。動いている区間ならその区間の見た目の速度 × 1.5、
-  // 止まっている区間(飛ばされた区間を追いつく)なら経路全体を 8 秒で渡る速さ
   const CATCH_UP_PX_PER_SEC = TOTAL / 8
   const legLenPx = (() => {
     if (leg.seconds <= 0) return 0

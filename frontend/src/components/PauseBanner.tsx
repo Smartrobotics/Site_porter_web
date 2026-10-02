@@ -1,14 +1,8 @@
 import type { CSSProperties } from 'react'
 import { IconAlert } from './icons'
 
-/** エンジンが RUNNING の reason に載せる文字列(scenario_control の EmgStopWatch) */
 const EMERGENCY_STOP = 'emergency stop'
 
-/**
- * 走行中の一時停止。ロボットは止まっているが依頼は running のまま。
- * 非常停止(バンパー・非常停止ボタン)は解除すると Atmobi が自分で走り出すので、
- * ここには「解除してください」だけ書き、ボタンは置かない。
- */
 export function PauseBanner({ reason, style }: { reason?: string | null; style?: CSSProperties }) {
   if (!reason) return null
   const emergency = reason.startsWith(EMERGENCY_STOP)

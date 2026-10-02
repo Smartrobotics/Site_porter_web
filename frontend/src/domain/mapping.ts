@@ -1,17 +1,8 @@
-/**
- * サーバーの request 1行を画面の TransportTask に直す。
- *
- * サーバーが持つのは「依頼がどこまで進んだか」(request.status)と
- * 「ロボットがいまどの断片にいるか」(robot.phase / step_index)だけ。
- * 画面の細かいフェーズはそこから組み立てる。
- * 実機に差し替わっても、サーバーが同じ形で返す限りここは変わらない。
- */
 
 import type { TransportTask } from './types'
 import { PRIORITY_FROM_DB } from './types'
 import type { RobotTransportPhase } from './phase'
 
-/** GET /api/request が返す1行 */
 export interface RequestRaw {
   id: number
   kind: 'delivery' | 'collect'
@@ -35,33 +26,21 @@ export interface RequestRaw {
   confirmed_at: string | null
   robot_phase: string | null
   robot_scenario: string | null
-  /** ロボットがいる階(エレベーター断片の完了で更新)。走行中の依頼だけ */
   robot_floor: number | null
-  /** 断片の中でいま動いているアクションとその番号(0始まり)。断面図用 */
   robot_action: string | null
   robot_action_index: number | null
-  /** そのアクションの開始時刻(ISO8601、+09:00 付き) */
   robot_action_since: string | null
-  /** 走行中の一時停止の理由。"emergency stop" = 非常停止中。通常は null */
   robot_pause_reason: string | null
   step_index: number | null
   step_total: number | null
 }
 
-/** "2026-09-10 03:35:02"(UTC)→ ミリ秒。DBは datetime('now') = UTC で入れている */
 function toMs(s: string | null): number | undefined {
   if (!s) return undefined
   const ms = Date.parse(`${s.replace(' ', 'T')}Z`)
   return Number.isNaN(ms) ? undefined : ms
 }
 
-/**
- * 断片の種別 → 画面のフェーズ。
- *
- * 番号では決められない。走行の断片数は依頼ごとに変わり、move_to_target は
- * エレベーターの前後で2回出る。種別で見れば計画が変わっても壊れない。
- * 種別は断片名の末尾にある: run_<id>_<NN>_<kind>
- */
 const KIND_PHASE: Record<string, RobotTransportPhase> = {
   init: 'dispatching',
   pick_up: 'loading',
@@ -71,7 +50,6 @@ const KIND_PHASE: Record<string, RobotTransportPhase> = {
   return_home: 'returning',
 }
 
-/** run_11_05_move_to_target → move_to_target */
 function fragmentKind(name: string | null): string {
   if (!name) return ''
   const m = /^run_\d+_\d+_(.+)$/.exec(name)
@@ -96,7 +74,6 @@ function phaseOf(r: RequestRaw): RobotTransportPhase {
     case 'queued':
       return 'queued'
     case 'running':
-      // 回収はひとまとめに「空荷台回収中」。段階を分けても人には意味がない
       if (r.kind === 'collect') return 'returning'
       return KIND_PHASE[fragmentKind(r.robot_scenario)] ?? 'transporting'
     case 'delivered':
@@ -115,17 +92,10 @@ function phaseOf(r: RequestRaw): RobotTransportPhase {
 function progressOf(r: RequestRaw, phase: RobotTransportPhase): number {
   if (phase === 'completed') return 100
   if (r.status !== 'running' || !r.step_total) return 0
-  // step_index は「いま走っている断片の番号」(1始まり)。終わった断片は
-  // その1つ手前まで。最後の断片を走行中に 100% と出さないため
   const done = Math.max(0, (r.step_index ?? 0) - 1)
   return Math.round((done / r.step_total) * 100)
 }
 
-/**
- * @param noSpace 搬送先に空き番地がない(E7)。マスタから判断してストアが渡す。
- *                サーバーは「まだ番地を決めていない」しか返さないため、
- *                順番待ちの理由はこちらで見分ける
- */
 export function toTask(r: RequestRaw, noSpace = false): TransportTask {
   const phase = phaseOf(r)
   const message =
