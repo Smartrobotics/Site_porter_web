@@ -17,7 +17,7 @@ services:
       # ブリッジが応答しないまま走行を待つ上限。超えたら失敗 + 人の手待ち
       BRIDGE_DOWN_FAIL_SECONDS: 120
       SCENARIO_DIR: /scenarios
-      CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173,https://192.168.214.28"
+      CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173,https://192.168.214.28,https://192.168.214.28:5173,https://192.168.240.201:5173"
     volumes:
       - ./backend:/app               # ホットリロード用
       - ./data:/data                 # DBの実体は ./data/app.db（down -v でも消えない）
