@@ -5,8 +5,9 @@
         {
             "action": "move_forward_time",
             "forward": 0,
+            "distance": 1.15,
             "obstacle_check": true,
-            "clear_dist": 0.30,
+            "clear_dist": 0.1,
             "block_timeout": 30
         },
         {

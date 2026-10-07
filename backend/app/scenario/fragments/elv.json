@@ -16,7 +16,8 @@
             "action": "start_navigation",
             "loop": false,
             "obstacle_retry": 2,
-            "obstacle_wait": 15
+            "obstacle_wait": 15,
+            "inflation_cost_scaling": 10.0
         },
         {
             "action": "set_goal_elv",

@@ -36,12 +36,17 @@ def check(name, cond, detail=''):
         ok = False
 
 
-MFT_PATH_CHECK_KEYS = ('obstacle_check', 'clear_dist', 'block_timeout', 'edge_x')
+# Step options that exist only in the site fragments (the robot references
+# predate them): path check / distance on move_forward_time, per-step inflation
+# on start_navigation. Compared without them.
+SITE_ONLY_KEYS = {
+    'move_forward_time': ('obstacle_check', 'clear_dist', 'block_timeout', 'edge_x', 'distance'),
+    'start_navigation': ('inflation_cost_scaling', 'inflation_radius'),
+}
 
 
 def no_path_check(steps):
-    return [{k: v for k, v in s.items() if k not in MFT_PATH_CHECK_KEYS}
-            if s.get('action') == 'move_forward_time' else s
+    return [{k: v for k, v in s.items() if k not in SITE_ONLY_KEYS.get(s.get('action'), ())}
             for s in steps]
 
 
