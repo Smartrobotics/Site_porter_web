@@ -163,23 +163,23 @@ WHEN NEW.updated_at = OLD.updated_at
 BEGIN UPDATE request SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
 INSERT OR IGNORE INTO area (id, floor, map_no, label) VALUES
-    (1, 2, 19, '2Fエレベータ付近'),
-    (2, 1, 18, '1Fエレベータ付近');
+    (1, 2, 21, '2Fエレベータ付近'),
+    (2, 1, 13, '1Fエレベータ付近');
 
 INSERT OR IGNORE INTO street_address (id, area_id, address_no, path_no) VALUES
-    (1, 1, 1, 3),
-    (2, 1, 2, 4),
-    (3, 1, 3, 5),
-    (4, 2, 1, 3),
-    (5, 2, 2, 4),
-    (6, 2, 3, 5);
+    (1, 1, 1, 2),   -- 2F address 1
+    (2, 1, 2, 3),   -- 2F address 2
+    (3, 1, 3, 4),   -- 2F address 3
+    (4, 2, 1, 5),   -- 1F address 1
+    (5, 2, 2, 6),   -- 1F address 2
+    (6, 2, 3, 7);   -- 1F address 3
 
 INSERT OR IGNORE INTO rack (id, marker_id, street_address_id, is_empty) VALUES
-    (1, 3, 1, 1),
-    (2, 2, 2, 1),
-    (3, 1, 3, 1),
-    (4, 4, 4, 1),
-    (5, 5, 6, 1);
+    (1, 1, 1, 1),   -- marker 1 -> 2F address 1
+    (2, 2, 2, 1),   -- marker 2 -> 2F address 2
+    (3, 3, 3, 1),   -- marker 3 -> 2F address 3
+    (4, 4, 4, 1),   -- marker 4 -> 1F address 1
+    (5, 5, 6, 1);   -- marker 5 -> 1F address 3 (1F address 2 is free)
 
 INSERT OR IGNORE INTO user (id, name) VALUES (1, '田中'), (2, '鈴木'), (3, '佐藤');
 

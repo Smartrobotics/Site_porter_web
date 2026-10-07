@@ -2,18 +2,18 @@
     "_comment": "Site constants the generator actually reads: home / home_path_no / elv_pose_path_no / elv_wait_pose_path_no and elevator. map_no is NOT among them: it comes from the database (area.map_no), because the interface shows it and it changes together with the site. Measure these again when moving to another site: guessed values send the robot to the wrong place.",
     "floors": {
         "2": {
-            "map_no": 19,
+            "map_no": 21,
             "home": {
-                "x": 1.105,
-                "y": 5.201,
-                "yaw": 181.6
+                "x": 0.615,
+                "y": 10.200,
+                "yaw": -178.1
             },
-            "home_path_no": 6,
-            "elv_wait_pose_path_no": 2,
-            "elv_pose_path_no": 1
+            "home_path_no": 1,
+            "elv_wait_pose_path_no": 5,
+            "elv_pose_path_no": 6
         },
         "1": {
-            "map_no": 18,
+            "map_no": 13,
             "elv_wait_pose_path_no": 2,
             "elv_pose_path_no": 1
         }
@@ -22,17 +22,17 @@
         "2->1": {
             "exit_offset": 3.6,
             "init_pose": {
-                "x": -0.523,
-                "y": -0.131,
-                "yaw": 0.4
+                "x": -0.444,
+                "y": -0.018,
+                "yaw": 0.0
             }
         },
         "1->2": {
             "exit_offset": 3.6,
             "init_pose": {
-                "x": -0.523,
-                "y": -0.131,
-                "yaw": 0.4
+                "x": 0.763,
+                "y": 0.051,
+                "yaw": 4.6
             }
         }
     }
