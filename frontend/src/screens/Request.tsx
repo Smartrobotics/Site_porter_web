@@ -7,6 +7,9 @@ import { areaLabel, SITE_NAME, type Area } from '../domain/master'
 import { IconArrow, IconCamera } from '../components/icons'
 import { LocationBadge } from '../components/LocationBadge'
 
+// テスト用: 同じ送り状番号での依頼を許す(backend の ALLOW_DUPLICATE_TRACKING_NO と揃える)
+const ALLOW_DUPLICATE_TRACKING_NO = import.meta.env.VITE_ALLOW_DUPLICATE_TRACKING_NO === 'true'
+
 const PRIORITIES: { value: Priority; label: string; cls: string }[] = [
   { value: 'urgent', label: '高', cls: 'on-urgent' },
   { value: 'normal', label: '中', cls: 'on-normal' },
@@ -72,7 +75,8 @@ export function Request() {
   const rackElsewhere = !!rack && rack.areaId !== undefined && rack.areaId !== fromAreaId
 
   // 送り状番号は二重送信の検査キー。送る前に気づけるようにする
-  const trackingTaken = trackingNo.trim()
+  // (テスト用に VITE_ALLOW_DUPLICATE_TRACKING_NO=true で検査を外せる)
+  const trackingTaken = trackingNo.trim() && !ALLOW_DUPLICATE_TRACKING_NO
     ? tasks.find((t) => t.trackingNo === trackingNo.trim())
     : undefined
 

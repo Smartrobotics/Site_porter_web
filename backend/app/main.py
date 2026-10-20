@@ -30,6 +30,9 @@ from .schemas import (
 setup_logging()
 log = logging.getLogger(__name__)
 
+# テスト用: 同じ送り状番号で何度でも依頼できるようにする。本番では false のまま
+ALLOW_DUPLICATE_TRACKING_NO = os.getenv("ALLOW_DUPLICATE_TRACKING_NO", "false").lower() == "true"
+
 origins = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "https://localhost:5173").split(",") if o.strip()
 ]
@@ -230,7 +233,16 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
                 ),
             )
 
-    if payload.tracking_no:
+    tracking_no = payload.tracking_no
+    if tracking_no and ALLOW_DUPLICATE_TRACKING_NO:
+        # 列は UNIQUE のまま。重複したら「番号 (2)」「番号 (3)」… の空いている番号で保存する
+        n = 1
+        while db.execute(
+            "SELECT 1 FROM request WHERE tracking_no = ?", (tracking_no,)
+        ).fetchone():
+            n += 1
+            tracking_no = f"{payload.tracking_no} ({n})"
+    elif tracking_no:
         dup = db.execute(
             """SELECT id, created_at, is_deleted FROM request
                WHERE tracking_no = ?""",
@@ -266,7 +278,7 @@ def create_request(payload: RequestCreate, db: sqlite3.Connection = Depends(get_
             RETURNING id
             """,
             (
-                payload.tracking_no,
+                tracking_no,
                 payload.item,
                 payload.receiver_name,
                 receiver_user_id,

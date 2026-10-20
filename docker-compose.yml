@@ -17,6 +17,8 @@ services:
       # ブリッジが応答しないまま走行を待つ上限。超えたら失敗 + 人の手待ち
       BRIDGE_DOWN_FAIL_SECONDS: 120
       SCENARIO_DIR: /scenarios
+      # テスト用: 同じ送り状番号の依頼を許す。本番では false
+      ALLOW_DUPLICATE_TRACKING_NO: "true"
       CORS_ORIGINS: "http://localhost:5173,https://localhost:5173,https://192.168.1.114:5173,https://192.168.40.227:5173,https://192.168.214.28,https://192.168.214.28:5173,https://192.168.240.201:5173"
     volumes:
       - ./backend:/app               # ホットリロード用
@@ -39,6 +41,9 @@ services:
     build: ./frontend
     container_name: siteporter-frontend
     restart: unless-stopped
+    environment:
+      # テスト用: 同じ送り状番号の依頼を許す(backend と揃える)
+      VITE_ALLOW_DUPLICATE_TRACKING_NO: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules            # コンテナ側の node_modules を保護
